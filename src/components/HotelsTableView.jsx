@@ -44,7 +44,7 @@ export default function HotelsTableView() {
   });
 
   const getHotelRoomCount = (hotelId) => {
-    const directRooms = globalRooms.filter(r => r.hotel_id === hotelId);
+    const directRooms = globalRooms.filter(r => (!r.hotel_id && hotelId === 'hotel_aurastay_01') || r.hotel_id === hotelId);
     if (directRooms.length > 0) return directRooms.length;
     const hotel = hotels.find(h => h.id === hotelId);
     return hotel?.totalRooms || 0;
