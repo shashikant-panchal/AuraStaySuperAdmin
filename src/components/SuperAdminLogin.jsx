@@ -4,23 +4,17 @@ import { ShieldCheck, Lock, Mail, ArrowRight, Sparkles, Server } from 'lucide-re
 
 export default function SuperAdminLogin() {
   const { login } = useSuperAdmin();
-  const [email, setEmail] = useState('superadmin@aurastay.com');
-  const [password, setPassword] = useState('super123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
 
   const handleSubmit = (e) => {
     e.preventDefault();
     setError('');
-    const success = login(email, password);
+    const success = login(email.trim(), password.trim());
     if (!success) {
-      setError('Invalid Super Admin credentials. Try superadmin@aurastay.com / super123');
+      setError('Invalid Super Admin credentials.');
     }
-  };
-
-  const handleQuickDemo = () => {
-    setEmail('superadmin@aurastay.com');
-    setPassword('super123');
-    login('superadmin@aurastay.com', 'super123');
   };
 
   return (
@@ -101,16 +95,11 @@ export default function SuperAdminLogin() {
             </button>
           </form>
 
-          {/* Quick Demo Access */}
-          <div className="mt-6 pt-5 border-t border-slate-800/80">
-            <button
-              type="button"
-              onClick={handleQuickDemo}
-              className="w-full py-2.5 px-3 bg-slate-800/60 hover:bg-slate-800 text-slate-300 hover:text-white rounded-xl text-xs font-semibold flex items-center justify-center space-x-2 border border-slate-700/50 transition"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-              <span>1-Click Demo Login (Super Admin)</span>
-            </button>
+          {/* Information Notice */}
+          <div className="mt-6 pt-5 border-t border-slate-800/80 text-center">
+            <p className="text-[11px] text-slate-500">
+              Authorized platform super administrators only.
+            </p>
           </div>
         </div>
 
@@ -123,3 +112,4 @@ export default function SuperAdminLogin() {
     </div>
   );
 }
+
