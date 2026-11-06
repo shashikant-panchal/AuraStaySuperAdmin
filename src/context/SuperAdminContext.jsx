@@ -246,6 +246,23 @@ export function SuperAdminProvider({ children }) {
     await updateHotel({ ...hotel, status: newStatus });
   };
 
+  const deleteRoom = async (roomId, roomNumber) => {
+    setGlobalRooms(prev => prev.filter(r => r.id !== roomId && r.room_number !== roomNumber));
+    showNotification(`Room ${roomNumber} deleted from inventory.`);
+
+    if (isSupabaseConfigured) {
+      try {
+        if (roomId) {
+          await supabase.from('rooms').delete().eq('id', roomId);
+        } else if (roomNumber) {
+          await supabase.from('rooms').delete().eq('room_number', roomNumber);
+        }
+      } catch (err) {
+        console.warn('Supabase room delete error:', err);
+      }
+    }
+  };
+
   // 7. Aggregated Platform Metrics
   const metrics = {
     totalHotels: hotels.length,
@@ -278,7 +295,8 @@ export function SuperAdminProvider({ children }) {
       logout,
       addHotel,
       updateHotel,
-      toggleHotelStatus
+      toggleHotelStatus,
+      deleteRoom
     }}>
       {children}
     </SuperAdminContext.Provider>

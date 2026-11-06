@@ -1,16 +1,16 @@
 import React, { useState } from 'react';
 import { useSuperAdmin } from '../context/SuperAdminContext';
-import { 
-  Building2, 
-  Search, 
-  Filter, 
-  ExternalLink, 
-  Edit3, 
-  Power, 
-  KeyRound, 
-  MapPin, 
-  Mail, 
-  Phone, 
+import {
+  Building2,
+  Search,
+  Filter,
+  ExternalLink,
+  Edit3,
+  Power,
+  KeyRound,
+  MapPin,
+  Mail,
+  Phone,
   BedDouble,
   ShieldCheck,
   CheckCircle2,
@@ -20,10 +20,10 @@ import {
 } from 'lucide-react';
 
 export default function HotelsTableView() {
-  const { 
-    hotels, 
-    toggleHotelStatus, 
-    setEditingHotel, 
+  const {
+    hotels,
+    toggleHotelStatus,
+    setEditingHotel,
     setIsCreateHotelModalOpen,
     globalRooms,
     globalReservations,
@@ -35,9 +35,9 @@ export default function HotelsTableView() {
 
   const filteredHotels = hotels.filter(h => {
     const matchSearch = h.name.toLowerCase().includes(search.toLowerCase()) ||
-                        h.slug.toLowerCase().includes(search.toLowerCase()) ||
-                        h.email.toLowerCase().includes(search.toLowerCase()) ||
-                        (h.city && h.city.toLowerCase().includes(search.toLowerCase()));
+      h.slug.toLowerCase().includes(search.toLowerCase()) ||
+      h.email.toLowerCase().includes(search.toLowerCase()) ||
+      (h.city && h.city.toLowerCase().includes(search.toLowerCase()));
     if (!matchSearch) return false;
     if (statusFilter !== 'ALL' && h.status !== statusFilter) return false;
     return true;
@@ -195,11 +195,10 @@ export default function HotelsTableView() {
                     {/* Status & Plan */}
                     <td className="py-4 px-4">
                       <div className="flex items-center gap-2">
-                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                          h.status === 'ACTIVE'
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${h.status === 'ACTIVE'
                             ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
                             : 'bg-rose-500/10 text-rose-400 border border-rose-500/30'
-                        }`}>
+                          }`}>
                           <span className={`w-1.5 h-1.5 rounded-full ${h.status === 'ACTIVE' ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`}></span>
                           {h.status}
                         </span>
@@ -235,11 +234,10 @@ export default function HotelsTableView() {
                         {/* Toggle Active / Suspended */}
                         <button
                           onClick={() => toggleHotelStatus(h.id)}
-                          className={`p-1.5 rounded-lg transition ${
-                            h.status === 'ACTIVE'
+                          className={`p-1.5 rounded-lg transition ${h.status === 'ACTIVE'
                               ? 'bg-slate-800 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400'
                               : 'bg-slate-800 hover:bg-emerald-500/20 text-slate-400 hover:text-emerald-400'
-                          }`}
+                            }`}
                           title={h.status === 'ACTIVE' ? 'Suspend Hotel' : 'Activate Hotel'}
                         >
                           <Power className="w-3.5 h-3.5" />

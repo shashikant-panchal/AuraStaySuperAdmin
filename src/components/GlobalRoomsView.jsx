@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { useSuperAdmin } from '../context/SuperAdminContext';
-import { BedDouble, Search, Building2, CheckCircle2, AlertTriangle, Wrench, Sparkles } from 'lucide-react';
+import { BedDouble, Search, Building2, CheckCircle2, AlertTriangle, Wrench, Sparkles, Trash2 } from 'lucide-react';
 
 export default function GlobalRoomsView() {
-  const { globalRooms, hotels } = useSuperAdmin();
+  const { globalRooms, hotels, deleteRoom } = useSuperAdmin();
   const [search, setSearch] = useState('');
 
   const getHotelName = (hotelId) => {
@@ -56,12 +56,13 @@ export default function GlobalRoomsView() {
               <th className="py-3.5 px-4">Floor</th>
               <th className="py-3.5 px-4">Base Rate / Night</th>
               <th className="py-3.5 px-5 text-right">Status</th>
+              <th className="py-3.5 px-4 text-center">Action</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800/60">
             {filteredRooms.length === 0 ? (
               <tr>
-                <td colSpan={6} className="text-center py-12 text-slate-500">
+                <td colSpan={7} className="text-center py-12 text-slate-500">
                   <BedDouble className="w-8 h-8 mx-auto mb-2 text-slate-600 opacity-50" />
                   No rooms loaded. Rooms created by Hotel Admins in the PMS will sync here in real time.
                 </td>
@@ -100,6 +101,19 @@ export default function GlobalRoomsView() {
                     }`}>
                       {r.status}
                     </span>
+                  </td>
+                  <td className="py-4 px-4 text-center">
+                    <button
+                      onClick={() => {
+                        if (window.confirm(`Are you sure you want to permanently delete Room ${r.room_number}? This cannot be undone.`)) {
+                          deleteRoom(r.id, r.room_number);
+                        }
+                      }}
+                      title={`Delete Room ${r.room_number}`}
+                      className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </td>
                 </tr>
               ))
