@@ -55,10 +55,10 @@ export default function Header() {
         <button
           onClick={() => setIsSqlModalOpen(true)}
           className="hidden sm:flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 text-xs font-semibold transition"
-          title="View & Copy Supabase Multi-Tenant SQL Migration"
+          title="View Database Schema Script"
         >
           <Database className="w-3.5 h-3.5 text-cyan-400" />
-          <span>SQL Schema</span>
+          <span>Database Schema</span>
         </button>
 
         {/* Create Hotel Tenant button */}

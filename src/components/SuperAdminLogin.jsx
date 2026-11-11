@@ -105,8 +105,8 @@ export default function SuperAdminLogin() {
 
         {/* Footer info */}
         <div className="mt-6 text-center text-[11px] text-slate-500 flex items-center justify-center gap-2">
-          <Server className="w-3 h-3 text-emerald-400" />
-          <span>Connected to Supabase Cluster: pdsfctfixxfazchamznm</span>
+          <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+          <span>Enterprise Cloud Management &bull; Secure Session</span>
         </div>
       </div>
     </div>

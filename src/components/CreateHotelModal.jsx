@@ -141,7 +141,7 @@ export default function CreateHotelModal() {
           <div className="p-4 bg-indigo-950/20 border border-indigo-900/40 rounded-2xl space-y-3">
             <div className="text-[11px] font-bold text-indigo-400 uppercase tracking-wider flex items-center gap-1.5">
               <KeyRound className="w-3.5 h-3.5" />
-              <span>Hotel Admin Login Credentials (For Hotel PMS)</span>
+              <span>Hotel Admin Login Credentials</span>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

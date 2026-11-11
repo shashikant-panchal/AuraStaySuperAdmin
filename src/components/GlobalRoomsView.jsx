@@ -65,7 +65,7 @@ export default function GlobalRoomsView() {
               <tr>
                 <td colSpan={7} className="text-center py-12 text-slate-500">
                   <BedDouble className="w-8 h-8 mx-auto mb-2 text-slate-600 opacity-50" />
-                  No rooms loaded. Rooms created by Hotel Admins in the PMS will sync here in real time.
+                  No rooms loaded. Rooms created by Hotel Admins will sync here in real time.
                 </td>
               </tr>
             ) : (
@@ -169,7 +169,7 @@ export default function GlobalRoomsView() {
             </div>
 
             <div className="bg-rose-950/30 border border-rose-500/30 rounded-xl p-3.5 text-xs text-rose-300 leading-relaxed">
-              <strong className="text-rose-200">Warning:</strong> Permanently deleting this room will remove it from hotel inventory, the PMS stayview, and live booking channels.
+              <strong className="text-rose-200">Warning:</strong> Permanently deleting this room will remove it from hotel inventory, the Stayview calendar, and live booking channels.
             </div>
 
             <div className="flex items-center justify-end space-x-3 pt-2">

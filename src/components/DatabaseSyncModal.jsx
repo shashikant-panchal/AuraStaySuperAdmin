@@ -93,8 +93,8 @@ export default function DatabaseSyncModal() {
               <Database className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-white">Multi-Tenant PostgreSQL Schema</h3>
-              <p className="text-xs text-slate-400">Supabase SQL Editor Migration</p>
+              <h3 className="text-base font-bold text-white">Multi-Tenant Database Schema</h3>
+              <p className="text-xs text-slate-400">Database Schema Migration</p>
             </div>
           </div>
           <button
@@ -107,7 +107,7 @@ export default function DatabaseSyncModal() {
 
         <div className="p-6 space-y-4">
           <p className="text-xs text-slate-300 leading-relaxed">
-            Run this migration in your <strong className="text-white">Supabase SQL Editor</strong> to create the <code className="text-indigo-400 bg-slate-950 px-1.5 py-0.5 rounded">hotels</code> table, link <code className="text-indigo-400 bg-slate-950 px-1.5 py-0.5 rounded">hotel_id</code> across rooms & reservations, and enable realtime synchronization.
+            Run this migration in your SQL Editor to create the <code className="text-indigo-400 bg-slate-950 px-1.5 py-0.5 rounded">hotels</code> table, link <code className="text-indigo-400 bg-slate-950 px-1.5 py-0.5 rounded">hotel_id</code> across rooms & reservations, and enable realtime synchronization.
           </p>
 
           <div className="relative">
@@ -126,7 +126,7 @@ export default function DatabaseSyncModal() {
           <div className="pt-2 flex items-center justify-between text-xs text-slate-400">
             <div className="flex items-center space-x-2">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-              <span>Project: https://pdsfctfixxfazchamznm.supabase.co</span>
+              <span>Realtime Cloud Database: Connected</span>
             </div>
             <button
               onClick={() => setIsSqlModalOpen(false)}

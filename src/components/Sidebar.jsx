@@ -6,6 +6,7 @@ import {
   BedDouble, 
   BarChart3, 
   Database,
+  ShieldCheck,
   ExternalLink,
   ShieldAlert,
   HelpCircle
@@ -68,7 +69,7 @@ export default function Sidebar() {
           rel="noopener noreferrer"
           className="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium text-slate-400 hover:text-cyan-300 hover:bg-slate-800/60 transition group"
         >
-          <span className="truncate">Hotel Admin (PMS)</span>
+          <span className="truncate">Hotel Admin Portal</span>
           <ExternalLink className="w-3.5 h-3.5 text-slate-600 group-hover:text-cyan-400" />
         </a>
 
@@ -87,11 +88,11 @@ export default function Sidebar() {
       <div className="mt-auto pt-4">
         <div className="p-3.5 rounded-2xl bg-gradient-to-b from-indigo-950/40 to-slate-950 border border-indigo-900/40 text-xs">
           <div className="flex items-center space-x-2 text-indigo-400 font-bold mb-1">
-            <Database className="w-4 h-4" />
-            <span>Supabase Sync</span>
+            <ShieldCheck className="w-4 h-4" />
+            <span>Enterprise Cloud</span>
           </div>
           <p className="text-[11px] text-slate-400 leading-relaxed">
-            Multi-tenant PostgreSQL schema enables cross-hotel real-time room locking.
+            Centralized property management with real-time multi-hotel synchronization.
           </p>
           <button
             onClick={() => setIsSqlModalOpen(true)}
