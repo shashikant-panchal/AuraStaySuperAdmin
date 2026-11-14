@@ -24,9 +24,9 @@ export default function MetricCards() {
       borderColor: 'border-indigo-500/20'
     },
     {
-      label: 'Total Managed Rooms',
-      value: metrics.totalRooms,
-      subtext: 'Across all active hotel properties',
+      label: 'Created / Assigned Rooms',
+      value: `${metrics.totalRooms} / ${metrics.totalAssignedRooms || 0}`,
+      subtext: `${metrics.totalRooms} created by Admins of ${metrics.totalAssignedRooms || 0} assigned`,
       icon: BedDouble,
       color: 'from-cyan-500/20 to-cyan-500/5',
       textColor: 'text-cyan-400',

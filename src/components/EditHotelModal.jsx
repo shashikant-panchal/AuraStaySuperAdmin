@@ -19,7 +19,7 @@ export default function EditHotelModal() {
   const [address, setAddress] = useState(editingHotel.address || '');
   const [city, setCity] = useState(editingHotel.city || '');
   const [totalRooms, setTotalRooms] = useState(
-    existingHotelRooms.length > 0 ? existingHotelRooms.length : (editingHotel.totalRooms || 0)
+    Math.max(Number(editingHotel.totalRooms) || 0, existingHotelRooms.length)
   );
   const [logoUrl, setLogoUrl] = useState(editingHotel.logoUrl || '');
   const [plan, setPlan] = useState(editingHotel.plan || 'Enterprise');
@@ -259,13 +259,15 @@ export default function EditHotelModal() {
                 />
               </div>
               <div>
-                <label className="block text-slate-300 font-semibold mb-1">Total Rooms Capacity</label>
+                <label className="block text-emerald-400 font-bold mb-1">
+                  Assigned Room Limit (Created: {existingHotelRooms.length})
+                </label>
                 <input
                   type="number"
                   min="0"
                   value={totalRooms}
                   onChange={(e) => setTotalRooms(e.target.value)}
-                  className="w-full px-3.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white font-mono focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-3.5 py-2 bg-slate-950 border border-emerald-500/50 rounded-xl text-emerald-300 font-mono font-bold focus:ring-2 focus:ring-emerald-500"
                 />
               </div>
             </div>

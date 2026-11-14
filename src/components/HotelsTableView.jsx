@@ -22,6 +22,7 @@ export default function HotelsTableView() {
     toggleHotelStatus,
     deleteHotel,
     setEditingHotel,
+    setSelectedInsightHotelId,
     setIsCreateHotelModalOpen,
     globalRooms,
     globalReservations,
@@ -47,15 +48,22 @@ export default function HotelsTableView() {
     return true;
   });
 
-  const getHotelRoomCount = (hotelId) => {
-    const directRooms = globalRooms.filter(r => r.hotel_id === hotelId);
-    if (directRooms.length > 0) return directRooms.length;
-    const hotel = hotels.find(h => h.id === hotelId);
-    return hotel?.totalRooms || 0;
+  const getHotelCreatedRoomsCount = (hotel) => {
+    const hId = String(hotel.id || '').trim().toLowerCase();
+    const hSlug = String(hotel.slug || '').trim().toLowerCase();
+    return globalRooms.filter(r => {
+      const rHid = String(r.hotel_id || '').trim().toLowerCase();
+      return rHid && (rHid === hId || rHid === hSlug);
+    }).length;
   };
 
-  const getHotelBookingCount = (hotelId) => {
-    return globalReservations.filter(r => r.hotel_id === hotelId).length;
+  const getHotelBookingCount = (hotel) => {
+    const hId = String(hotel.id || '').trim().toLowerCase();
+    const hSlug = String(hotel.slug || '').trim().toLowerCase();
+    return globalReservations.filter(r => {
+      const rHid = String(r.hotel_id || '').trim().toLowerCase();
+      return rHid && (rHid === hId || rHid === hSlug);
+    }).length;
   };
 
   return (
@@ -117,10 +125,10 @@ export default function HotelsTableView() {
               <th className="py-3.5 px-5">Admin Login Credentials</th>
               <th className="py-3.5 px-4">Property / Hotel</th>
               <th className="py-3.5 px-4">Admin Name & Location</th>
-              <th className="py-3.5 px-4 text-center">Rooms</th>
+              <th className="py-3.5 px-4 text-center">Rooms (Created / Assigned)</th>
               <th className="py-3.5 px-4 text-center">Bookings</th>
               <th className="py-3.5 px-4">Login Status</th>
-              <th className="py-3.5 px-5 text-right">Actions</th>
+              <th className="py-3.5 px-5 text-right">Actions & Insights</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800/60">
@@ -149,15 +157,26 @@ export default function HotelsTableView() {
               </tr>
             ) : (
               filteredHotels.map((h) => {
-                const roomCount = getHotelRoomCount(h.id);
-                const bookingCount = getHotelBookingCount(h.id);
+                const createdRooms = getHotelCreatedRoomsCount(h);
+                const assignedRooms = Number(h.totalRooms) || 0;
+                const remainingRooms = Math.max(0, assignedRooms - createdRooms);
+                const isLimitReached = assignedRooms > 0 && createdRooms >= assignedRooms;
+                const bookingCount = getHotelBookingCount(h);
                 const isPassVisible = !!visiblePasswords[h.id];
 
                 return (
-                  <tr key={h.id} className="hover:bg-slate-800/30 transition">
+                  <tr
+                    key={h.id}
+                    onClick={() => setSelectedInsightHotelId(h.id)}
+                    className="hover:bg-slate-800/40 transition cursor-pointer group"
+                    title="Click to view complete Admin Insights, Assigned vs Created Rooms & Controls"
+                  >
                     {/* Admin Login Credentials */}
-                    <td className="py-4 px-5 font-mono">
-                      <div className="text-white font-bold flex items-center gap-1.5">
+                    <td className="py-4 px-5 font-mono" onClick={(e) => e.stopPropagation()}>
+                      <div
+                        onClick={() => setSelectedInsightHotelId(h.id)}
+                        className="text-white group-hover:text-indigo-300 font-bold flex items-center gap-1.5 cursor-pointer"
+                      >
                         <Mail className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
                         <span>{h.email}</span>
                       </div>
@@ -188,14 +207,14 @@ export default function HotelsTableView() {
                           )}
                         </div>
                         <div>
-                          <div className="font-bold text-white text-xs flex items-center gap-1.5">
+                          <div className="font-bold text-white group-hover:text-indigo-300 text-xs flex items-center gap-1.5">
                             <span>{h.name}</span>
                             <span className="text-[10px] font-mono px-1.5 py-0.2 bg-slate-800 text-slate-400 rounded">
                               {h.shortName || 'HTL'}
                             </span>
                           </div>
                           <div className="text-[11px] text-slate-400 font-mono mt-0.5">
-                            ID: {h.slug}
+                            ID: {h.slug} &bull; <span className="text-indigo-400 underline">View Insights</span>
                           </div>
                         </div>
                       </div>
@@ -210,11 +229,22 @@ export default function HotelsTableView() {
                       </div>
                     </td>
 
-                    {/* Rooms */}
+                    {/* Rooms (Created / Assigned) */}
                     <td className="py-4 px-4 text-center">
-                      <span className="font-bold text-white font-mono bg-slate-800/80 px-2 py-1 rounded-lg">
-                        {roomCount}
-                      </span>
+                      <div className="inline-flex flex-col items-center gap-1">
+                        <span className="font-bold text-white font-mono bg-slate-800 border border-slate-700 px-2.5 py-1 rounded-lg text-xs">
+                          <span className="text-emerald-400">{createdRooms}</span>
+                          <span className="text-slate-500 mx-1">/</span>
+                          <span className="text-indigo-300">{assignedRooms}</span>
+                        </span>
+                        <span
+                          className={`text-[10px] font-bold font-mono ${
+                            isLimitReached ? 'text-amber-400' : 'text-slate-400'
+                          }`}
+                        >
+                          {isLimitReached ? 'Limit Reached' : `${remainingRooms} left`}
+                        </span>
+                      </div>
                     </td>
 
                     {/* Bookings */}
@@ -238,8 +268,18 @@ export default function HotelsTableView() {
                     </td>
 
                     {/* Actions */}
-                    <td className="py-4 px-5 text-right">
+                    <td className="py-4 px-5 text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end space-x-2">
+                        {/* View Complete Admin Insights */}
+                        <button
+                          onClick={() => setSelectedInsightHotelId(h.id)}
+                          className="px-2.5 py-1.5 rounded-lg bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white border border-indigo-500/30 transition flex items-center gap-1 text-[11px] font-bold cursor-pointer"
+                          title="View Complete Admin Insights, Assigned vs Created Rooms & Delete Rooms"
+                        >
+                          <ShieldCheck className="w-3.5 h-3.5" />
+                          <span>Insights</span>
+                        </button>
+
                         {/* Copy Login Credentials */}
                         <button
                           onClick={() => {
@@ -257,7 +297,7 @@ export default function HotelsTableView() {
                         <button
                           onClick={() => setEditingHotel(h)}
                           className="p-1.5 rounded-lg bg-slate-800 hover:bg-indigo-500/20 text-slate-400 hover:text-indigo-400 transition cursor-pointer"
-                          title="Edit Credentials & Password"
+                          title="Edit Credentials, Room Quota & Password"
                         >
                           <Edit3 className="w-3.5 h-3.5" />
                         </button>

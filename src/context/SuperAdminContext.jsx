@@ -70,7 +70,12 @@ export function SuperAdminProvider({ children }) {
 
   // 3. Global Platform Data
   const [globalRooms, setGlobalRooms] = useState([]);
+  const [globalRoomTypes, setGlobalRoomTypes] = useState([]);
   const [globalReservations, setGlobalReservations] = useState([]);
+  const [globalFnbOrders, setGlobalFnbOrders] = useState([]);
+  const [globalCabBookings, setGlobalCabBookings] = useState([]);
+  const [globalHkTasks, setGlobalHkTasks] = useState([]);
+  const [globalInvoices, setGlobalInvoices] = useState([]);
   const [activeTab, setActiveTab] = useState(() => {
     try {
       return localStorage.getItem('aavasa_superadmin_active_tab') || 'hotels';
@@ -81,6 +86,7 @@ export function SuperAdminProvider({ children }) {
   const [notification, setNotification] = useState(null);
   const [isCreateHotelModalOpen, setIsCreateHotelModalOpen] = useState(false);
   const [editingHotel, setEditingHotel] = useState(null);
+  const [selectedInsightHotelId, setSelectedInsightHotelId] = useState(null);
   const [isSqlModalOpen, setIsSqlModalOpen] = useState(false);
 
   // Persist activeTab and keep SuperAdmin session alive across refreshes
@@ -119,10 +125,24 @@ export function SuperAdminProvider({ children }) {
   const loadData = useCallback(async () => {
     if (!isSupabaseConfigured) return;
     try {
-      const [hotelsRes, roomsRes, resRes] = await Promise.all([
+      const [
+        hotelsRes,
+        roomsRes,
+        roomTypesRes,
+        resRes,
+        fnbRes,
+        cabRes,
+        hkRes,
+        invRes
+      ] = await Promise.all([
         supabase.from('hotels').select('*').order('created_at', { ascending: false }),
-        supabase.from('rooms').select('*'),
-        supabase.from('reservations').select('*').order('created_at', { ascending: false })
+        supabase.from('rooms').select('*').order('room_number', { ascending: true }),
+        supabase.from('room_types').select('*').order('name', { ascending: true }),
+        supabase.from('reservations').select('*').order('created_at', { ascending: false }),
+        supabase.from('fnb_orders').select('*').order('created_at', { ascending: false }),
+        supabase.from('cab_bookings').select('*').order('created_at', { ascending: false }),
+        supabase.from('housekeeping_tasks').select('*').order('created_at', { ascending: false }),
+        supabase.from('financial_invoices').select('*').order('created_at', { ascending: false })
       ]);
 
       if (!hotelsRes.error && Array.isArray(hotelsRes.data)) {
@@ -182,6 +202,14 @@ export function SuperAdminProvider({ children }) {
           );
         }
 
+        if (Array.isArray(roomTypesRes?.data)) {
+          setGlobalRoomTypes(
+            roomTypesRes.data.filter(
+              rt => rt.hotel_id && validHotelIds.has(String(rt.hotel_id).trim().toLowerCase())
+            )
+          );
+        }
+
         if (Array.isArray(resRes.data)) {
           const orphanRes = resRes.data.filter(
             r => !r.hotel_id || !validHotelIds.has(String(r.hotel_id).trim().toLowerCase())
@@ -198,6 +226,19 @@ export function SuperAdminProvider({ children }) {
               r => r.hotel_id && validHotelIds.has(String(r.hotel_id).trim().toLowerCase())
             )
           );
+        }
+
+        if (Array.isArray(fnbRes?.data)) {
+          setGlobalFnbOrders(fnbRes.data);
+        }
+        if (Array.isArray(cabRes?.data)) {
+          setGlobalCabBookings(cabRes.data);
+        }
+        if (Array.isArray(hkRes?.data)) {
+          setGlobalHkTasks(hkRes.data);
+        }
+        if (Array.isArray(invRes?.data)) {
+          setGlobalInvoices(invRes.data);
         }
       }
     } catch (err) {
@@ -418,7 +459,7 @@ export function SuperAdminProvider({ children }) {
 
     const roomCategories = Array.isArray(newHotel.roomCategories) ? newHotel.roomCategories : [];
     const categoryRoomsSum = roomCategories.reduce((sum, c) => sum + (Math.max(0, Number(c.count) || 0)), 0);
-    const resolvedTotalRooms = categoryRoomsSum > 0 ? categoryRoomsSum : (Number(newHotel.totalRooms) || 0);
+    const resolvedTotalRooms = Math.max(Number(newHotel.totalRooms) || 0, categoryRoomsSum);
 
     const hotel = {
       ...newHotel,
@@ -599,9 +640,28 @@ export function SuperAdminProvider({ children }) {
     await updateHotel({ ...hotel, status: newStatus });
   };
 
+  const updateHotelRoomLimit = async (hotelId, newLimit) => {
+    const cleanLimit = Math.max(0, Number(newLimit) || 0);
+    setHotels(prev => prev.map(h => h.id === hotelId ? { ...h, totalRooms: cleanLimit } : h));
+    showNotification(`Assigned room creation limit updated to ${cleanLimit} rooms.`);
+
+    if (isSupabaseConfigured) {
+      try {
+        await supabase.from('hotels').update({
+          total_rooms: cleanLimit,
+          updated_at: new Date().toISOString()
+        }).eq('id', hotelId);
+        await broadcastSuperAdminSync({ action: 'hotel_limit_updated', hotelId, totalRooms: cleanLimit });
+        await loadData();
+      } catch (err) {
+        console.warn('Supabase room limit update error:', err);
+      }
+    }
+  };
+
   const deleteRoom = async (roomId, roomNumber) => {
     setGlobalRooms(prev => prev.filter(r => r.id !== roomId && r.room_number !== roomNumber));
-    showNotification(`Room ${roomNumber} deleted from inventory.`);
+    showNotification(`Room #${roomNumber} deleted by SuperAdmin.`);
 
     if (isSupabaseConfigured) {
       try {
@@ -618,11 +678,14 @@ export function SuperAdminProvider({ children }) {
     }
   };
 
+  const selectedInsightHotel = hotels.find(h => h.id === selectedInsightHotelId) || null;
+
   // 7. Aggregated Platform Metrics
   const metrics = {
     totalHotels: hotels.length,
     activeHotels: hotels.filter(h => h.status === 'ACTIVE').length,
     totalRooms: globalRooms.length,
+    totalAssignedRooms: hotels.reduce((acc, h) => acc + (Number(h.totalRooms) || 0), 0),
     totalBookings: globalReservations.length,
     totalGrossRevenue: globalReservations.reduce((acc, r) => acc + (Number(r.amount) || 0), 0),
     confirmedBookings: globalReservations.filter(r => r.status === 'CONFIRMED' || r.status === 'CHECKED_IN').length,
@@ -634,7 +697,12 @@ export function SuperAdminProvider({ children }) {
       currentAdmin,
       hotels,
       globalRooms,
+      globalRoomTypes,
       globalReservations,
+      globalFnbOrders,
+      globalCabBookings,
+      globalHkTasks,
+      globalInvoices,
       metrics,
       activeTab,
       setActiveTab,
@@ -644,12 +712,16 @@ export function SuperAdminProvider({ children }) {
       setIsCreateHotelModalOpen,
       editingHotel,
       setEditingHotel,
+      selectedInsightHotel,
+      selectedInsightHotelId,
+      setSelectedInsightHotelId,
       isSqlModalOpen,
       setIsSqlModalOpen,
       login,
       logout,
       addHotel,
       updateHotel,
+      updateHotelRoomLimit,
       deleteHotel,
       toggleHotelStatus,
       deleteRoom,

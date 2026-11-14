@@ -9,6 +9,7 @@ import GlobalBookingsView from './components/GlobalBookingsView';
 import GlobalRoomsView from './components/GlobalRoomsView';
 import CreateHotelModal from './components/CreateHotelModal';
 import EditHotelModal from './components/EditHotelModal';
+import AdminInsightsModal from './components/AdminInsightsModal';
 import DatabaseSyncModal from './components/DatabaseSyncModal';
 import { CheckCircle2, AlertCircle } from 'lucide-react';
 
@@ -57,6 +58,7 @@ export default function App() {
       {/* Modals */}
       <CreateHotelModal />
       <EditHotelModal />
+      <AdminInsightsModal />
       <DatabaseSyncModal />
     </div>
   );
