@@ -372,7 +372,64 @@ BEGIN
         ALTER PUBLICATION supabase_realtime ADD TABLE banquet_bookings;
     EXCEPTION WHEN duplicate_object THEN NULL;
     END;
+    BEGIN
+        ALTER PUBLICATION supabase_realtime ADD TABLE restaurant_tables;
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END;
+    BEGIN
+        ALTER PUBLICATION supabase_realtime ADD TABLE restaurant_menu_items;
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END;
 END $$;
+
+-- 8b. Dynamic Restaurant POS & Channel Code Columns
+ALTER TABLE IF EXISTS hotels
+    ADD COLUMN IF NOT EXISTS aiosell_hotel_code TEXT;
+ALTER TABLE IF EXISTS fnb_orders
+    ADD COLUMN IF NOT EXISTS hotel_id TEXT;
+ALTER TABLE IF EXISTS rooms
+    ADD COLUMN IF NOT EXISTS is_ota_locked BOOLEAN DEFAULT FALSE;
+ALTER TABLE IF EXISTS rooms
+    ADD COLUMN IF NOT EXISTS ota_channel TEXT;
+
+CREATE TABLE IF NOT EXISTS restaurant_tables (
+    id TEXT PRIMARY KEY,
+    hotel_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    area TEXT NOT NULL DEFAULT 'Main Dining',
+    seats INTEGER NOT NULL DEFAULT 4,
+    status TEXT NOT NULL DEFAULT 'VACANT',
+    guest_name TEXT,
+    room_number TEXT,
+    items_count INTEGER NOT NULL DEFAULT 0,
+    current_total NUMERIC(12, 2) NOT NULL DEFAULT 0,
+    active_order_id TEXT,
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE (hotel_id, name)
+);
+
+CREATE TABLE IF NOT EXISTS restaurant_menu_items (
+    id TEXT PRIMARY KEY,
+    hotel_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    category TEXT NOT NULL DEFAULT 'Main Course',
+    kitchen_station TEXT NOT NULL DEFAULT 'Hot Kitchen (Indian)',
+    price NUMERIC(10, 2) NOT NULL DEFAULT 0,
+    cost_price NUMERIC(10, 2) NOT NULL DEFAULT 0,
+    tax_pct NUMERIC(5, 2) NOT NULL DEFAULT 5,
+    unit TEXT NOT NULL DEFAULT 'Portion',
+    is_veg BOOLEAN NOT NULL DEFAULT TRUE,
+    status TEXT NOT NULL DEFAULT 'AVAILABLE',
+    prep_time TEXT DEFAULT '15 mins',
+    description TEXT,
+    image_url TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_restaurant_tables_hotel ON restaurant_tables (hotel_id);
+CREATE INDEX IF NOT EXISTS idx_restaurant_menu_items_hotel ON restaurant_menu_items (hotel_id);
+CREATE INDEX IF NOT EXISTS idx_reservations_hotel_dates ON reservations (hotel_id, check_in, check_out);
 
 -- 10. Disable RLS to allow seamless sync across Admin, SuperAdmin, and Guest Portals
 ALTER TABLE IF EXISTS hotels DISABLE ROW LEVEL SECURITY;
@@ -381,6 +438,8 @@ ALTER TABLE IF EXISTS rooms DISABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS reservations DISABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS banquet_bookings DISABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS fnb_orders DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS restaurant_tables DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS restaurant_menu_items DISABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS super_admins DISABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS housekeeping_tasks DISABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS inventory_items DISABLE ROW LEVEL SECURITY;

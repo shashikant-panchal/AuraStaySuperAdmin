@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 const SuperAdminContext = createContext(null);
@@ -246,32 +246,45 @@ export function SuperAdminProvider({ children }) {
     }
   }, []);
 
+  const realtimeDebounceRef = useRef(null);
+
+  const scheduleLoadData = useCallback(() => {
+    if (realtimeDebounceRef.current) clearTimeout(realtimeDebounceRef.current);
+    realtimeDebounceRef.current = setTimeout(() => {
+      loadData();
+    }, 300);
+  }, [loadData]);
+
   useEffect(() => {
     loadData();
+    // Free-plan optimization: realtime WebSockets handle live updates; fallback poll every 30s
     const pollTimer = setInterval(() => {
       loadData();
-    }, 4000);
-    return () => clearInterval(pollTimer);
+    }, 30000);
+    return () => {
+      clearInterval(pollTimer);
+      if (realtimeDebounceRef.current) clearTimeout(realtimeDebounceRef.current);
+    };
   }, [loadData]);
 
   useEffect(() => {
     if (!isSupabaseConfigured) return;
 
     const channel = supabase.channel('superadmin_realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'hotels' }, () => loadData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'rooms' }, () => loadData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'reservations' }, () => loadData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'hotels' }, () => scheduleLoadData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'rooms' }, () => scheduleLoadData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'reservations' }, () => scheduleLoadData())
       .subscribe();
 
     const broadcastChannel = supabase.channel('aurastay_sync_broadcast')
-      .on('broadcast', { event: 'webhook_update' }, () => loadData())
+      .on('broadcast', { event: 'webhook_update' }, () => scheduleLoadData())
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
       supabase.removeChannel(broadcastChannel);
     };
-  }, [loadData]);
+  }, [scheduleLoadData]);
 
   // 5. Strict Super Admin Authentication (superadmin@aavasa.com / aavasa@18)
   const login = async (email, password) => {
