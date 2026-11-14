@@ -2,13 +2,9 @@ import React from 'react';
 import { useSuperAdmin } from '../context/SuperAdminContext';
 import { 
   ShieldCheck, 
-  Plus, 
   Database, 
   LogOut, 
-  Globe, 
-  ExternalLink,
-  Layers,
-  Sparkles
+  KeyRound
 } from 'lucide-react';
 
 export default function Header() {
@@ -30,22 +26,22 @@ export default function Header() {
           </div>
           <div>
             <div className="flex items-center space-x-2">
-              <span className="font-extrabold text-sm text-white tracking-tight">AuraStay</span>
+              <span className="font-extrabold text-sm text-white tracking-tight">Aavasa</span>
               <span className="text-xs px-2 py-0.5 rounded-md font-bold bg-indigo-500/10 text-indigo-400 border border-indigo-500/30">
                 SuperAdmin
               </span>
             </div>
             <div className="text-[10px] text-slate-400 font-medium">
-              Multi-Tenant Hospitality Ecosystem
+              Admin Credential & Property Access Control
             </div>
           </div>
         </div>
 
         <div className="hidden md:flex items-center space-x-2 pl-4 border-l border-slate-800 text-xs">
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-          <span className="text-slate-400">Live Realtime Synced</span>
+          <span className="text-slate-400">Live Supabase Synced</span>
           <span className="text-slate-600">•</span>
-          <span className="text-slate-300 font-semibold">{metrics.activeHotels} Active Hotels</span>
+          <span className="text-slate-300 font-semibold">{metrics.activeHotels} Active Admin Credentials</span>
         </div>
       </div>
 
@@ -54,20 +50,20 @@ export default function Header() {
         {/* SQL Schema helper button */}
         <button
           onClick={() => setIsSqlModalOpen(true)}
-          className="hidden sm:flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 text-xs font-semibold transition"
+          className="hidden sm:flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 text-xs font-semibold transition cursor-pointer"
           title="View Database Schema Script"
         >
           <Database className="w-3.5 h-3.5 text-cyan-400" />
           <span>Database Schema</span>
         </button>
 
-        {/* Create Hotel Tenant button */}
+        {/* Create Admin Credentials button */}
         <button
           onClick={() => setIsCreateHotelModalOpen(true)}
-          className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-md shadow-indigo-600/20 transition"
+          className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-md shadow-indigo-600/20 transition cursor-pointer"
         >
-          <Plus className="w-4 h-4" />
-          <span>Register New Hotel</span>
+          <KeyRound className="w-4 h-4" />
+          <span>Create Admin Credentials</span>
         </button>
 
         {/* Profile & Logout */}
@@ -79,7 +75,7 @@ export default function Header() {
 
           <button
             onClick={logout}
-            className="w-8 h-8 rounded-lg bg-slate-800 hover:bg-rose-500/20 hover:text-rose-400 text-slate-400 border border-slate-700 flex items-center justify-center transition"
+            className="w-8 h-8 rounded-lg bg-slate-800 hover:bg-rose-500/20 hover:text-rose-400 text-slate-400 border border-slate-700 flex items-center justify-center transition cursor-pointer"
             title="Log Out"
           >
             <LogOut className="w-4 h-4" />
@@ -89,4 +85,3 @@ export default function Header() {
     </header>
   );
 }
-

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useSuperAdmin } from '../context/SuperAdminContext';
 import { X, Database, Copy, Check, Terminal, ExternalLink } from 'lucide-react';
 
-const SQL_SCRIPT = `-- AuraStay Multi-Tenant SaaS Master Database Migration
+const SQL_SCRIPT = `-- Aavasa Multi-Tenant SaaS Master Database Migration
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- 1. Hotels / Tenants Table
@@ -10,14 +10,14 @@ CREATE TABLE IF NOT EXISTS hotels (
     id TEXT PRIMARY KEY,
     slug TEXT UNIQUE NOT NULL,
     name TEXT NOT NULL,
-    short_name TEXT DEFAULT 'AST',
+    short_name TEXT DEFAULT 'HTL',
     logo_url TEXT DEFAULT '',
     owner_name TEXT NOT NULL,
     email TEXT UNIQUE NOT NULL,
-    password TEXT NOT NULL DEFAULT 'admin123',
-    mobile TEXT DEFAULT '7978578046',
-    address TEXT DEFAULT 'DLF Cyber City, Patia, Bhubaneswar, Odisha, India',
-    city TEXT DEFAULT 'Bhubaneswar',
+    password TEXT NOT NULL,
+    mobile TEXT DEFAULT '',
+    address TEXT DEFAULT 'India',
+    city TEXT DEFAULT 'Bengaluru',
     total_rooms INT DEFAULT 20,
     currency TEXT DEFAULT 'INR',
     currency_symbol TEXT DEFAULT '₹',
@@ -32,13 +32,13 @@ CREATE TABLE IF NOT EXISTS hotels (
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'rooms' AND column_name = 'hotel_id') THEN
-        ALTER TABLE rooms ADD COLUMN hotel_id TEXT DEFAULT 'hotel_aurastay_01';
+        ALTER TABLE rooms ADD COLUMN hotel_id TEXT DEFAULT 'shivanandi';
     END IF;
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'reservations' AND column_name = 'hotel_id') THEN
-        ALTER TABLE reservations ADD COLUMN hotel_id TEXT DEFAULT 'hotel_aurastay_01';
+        ALTER TABLE reservations ADD COLUMN hotel_id TEXT DEFAULT 'shivanandi';
     END IF;
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'fnb_orders' AND column_name = 'hotel_id') THEN
-        ALTER TABLE fnb_orders ADD COLUMN hotel_id TEXT DEFAULT 'hotel_aurastay_01';
+        ALTER TABLE fnb_orders ADD COLUMN hotel_id TEXT DEFAULT 'shivanandi';
     END IF;
 END $$;
 
@@ -52,8 +52,8 @@ ALTER TABLE IF EXISTS hotels DISABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS rooms DISABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS reservations DISABLE ROW LEVEL SECURITY;
 
--- 5. Clean Slate: No seed hotels or default credentials.
--- Create Hotel Admin credentials directly in the SuperAdmin portal.`;
+-- 5. Clean Slate: No seed hotels or default Admin credentials.
+-- Create Hotel Admin credentials directly in the Aavasa SuperAdmin portal.`;
 
 export default function DatabaseSyncModal() {
   const { isSqlModalOpen, setIsSqlModalOpen, showNotification } = useSuperAdmin();

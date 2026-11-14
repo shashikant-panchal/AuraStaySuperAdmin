@@ -9,7 +9,7 @@ export default function GlobalRoomsView() {
 
   const getHotelName = (hotelId) => {
     const h = hotels.find(item => item.id === hotelId);
-    return h ? h.name : 'AuraStay Suite';
+    return h ? h.name : (hotelId || 'Property');
   };
 
   const filteredRooms = globalRooms.filter(r => {

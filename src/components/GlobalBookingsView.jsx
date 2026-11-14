@@ -8,7 +8,7 @@ export default function GlobalBookingsView() {
 
   const getHotelName = (hotelId) => {
     const h = hotels.find(item => item.id === hotelId);
-    return h ? h.name : 'AuraStay Suite';
+    return h ? h.name : (hotelId || 'Property');
   };
 
   const filteredBookings = globalReservations.filter(r => {
