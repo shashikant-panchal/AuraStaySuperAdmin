@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useSuperAdmin } from '../context/SuperAdminContext';
 import { compressLogoImageFile } from '../utils/imageUpload';
+import { ROOM_TYPE_PRESETS, ROOM_TYPE_NAMES, buildNextCategoryRow } from '../utils/roomPresets';
 import { X, Save, KeyRound, Mail, Sparkles, BedDouble, Plus, Trash2, Building2, Upload, Image as ImageIcon } from 'lucide-react';
 
 export default function EditHotelModal() {
@@ -39,19 +40,33 @@ export default function EditHotelModal() {
     setPassword(pass);
   };
 
-  const addNewCategoryRow = () => {
-    const startBase = (existingHotelRooms.length + newRoomCategories.length + 1) * 100 + 1;
+  const addNewCategoryRow = (presetName = null) => {
     setNewRoomCategories(prev => [
       ...prev,
-      {
-        name: 'Standard Room',
-        count: 2,
-        startRoomNumber: startBase,
-        price: 2500,
-        bed: 'King Bed',
-        floor: 'Floor 1'
-      }
+      buildNextCategoryRow(prev, existingHotelRooms.length, presetName)
     ]);
+  };
+
+  const handleEditCategoryPresetChange = (index, selectedVal) => {
+    if (selectedVal === '__custom__') {
+      setNewRoomCategories(prev =>
+        prev.map((row, idx) => (idx === index ? { ...row, isCustomName: true, name: '' } : row))
+      );
+      return;
+    }
+    const preset = ROOM_TYPE_PRESETS.find(p => p.name === selectedVal);
+    setNewRoomCategories(prev =>
+      prev.map((row, idx) =>
+        idx === index
+          ? {
+              ...row,
+              isCustomName: false,
+              name: selectedVal,
+              ...(preset ? { price: preset.price, bed: preset.bed, areaSqft: preset.areaSqft, maxAdults: preset.maxAdults } : {})
+            }
+          : row
+      )
+    );
   };
 
   const updateNewCategoryRow = (index, field, value) => {
@@ -335,14 +350,27 @@ export default function EditHotelModal() {
                 <BedDouble className="w-4 h-4" />
                 <span>Property Rooms Inventory ({existingHotelRooms.length} Active Rooms)</span>
               </div>
-              <button
-                type="button"
-                onClick={addNewCategoryRow}
-                className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] flex items-center gap-1 transition cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Add More Rooms</span>
-              </button>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {ROOM_TYPE_NAMES.map(presetName => (
+                  <button
+                    key={presetName}
+                    type="button"
+                    onClick={() => addNewCategoryRow(presetName)}
+                    className="px-2 py-1 rounded-lg bg-slate-900 hover:bg-emerald-600/20 border border-slate-700 text-emerald-300 font-bold text-[10.5px] flex items-center gap-1 transition cursor-pointer"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>{presetName}</span>
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => addNewCategoryRow()}
+                  className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] flex items-center gap-1 transition cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add More Rooms</span>
+                </button>
+              </div>
             </div>
 
             {existingHotelRooms.length > 0 && (
@@ -372,13 +400,26 @@ export default function EditHotelModal() {
               <div key={idx} className="p-3 bg-slate-950/80 border border-slate-800 rounded-xl grid grid-cols-2 sm:grid-cols-6 gap-2.5 items-end">
                 <div className="col-span-2">
                   <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">Room Category *</label>
-                  <input
-                    type="text"
-                    required
-                    value={cat.name}
-                    onChange={(e) => updateNewCategoryRow(idx, 'name', e.target.value)}
-                    className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-white"
-                  />
+                  <select
+                    value={cat.isCustomName || (cat.name && !ROOM_TYPE_NAMES.includes(cat.name)) ? '__custom__' : (cat.name || 'Standard Room')}
+                    onChange={(e) => handleEditCategoryPresetChange(idx, e.target.value)}
+                    className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-white font-semibold"
+                  >
+                    {ROOM_TYPE_NAMES.map(tName => (
+                      <option key={tName} value={tName}>{tName}</option>
+                    ))}
+                    <option value="__custom__">Custom Room Type...</option>
+                  </select>
+                  {(cat.isCustomName || (cat.name && !ROOM_TYPE_NAMES.includes(cat.name))) && (
+                    <input
+                      type="text"
+                      required
+                      placeholder="Custom room type"
+                      value={cat.name}
+                      onChange={(e) => updateNewCategoryRow(idx, 'name', e.target.value)}
+                      className="w-full mt-1.5 px-2.5 py-1.5 bg-slate-900 border border-indigo-500/50 rounded-lg text-white text-xs"
+                    />
+                  )}
                 </div>
                 <div>
                   <label className="block text-[10px] text-emerald-400 uppercase font-bold mb-1">How Many *</label>

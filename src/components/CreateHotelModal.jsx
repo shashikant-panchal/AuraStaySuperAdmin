@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useSuperAdmin } from '../context/SuperAdminContext';
 import { compressLogoImageFile } from '../utils/imageUpload';
+import { ROOM_TYPE_PRESETS, ROOM_TYPE_NAMES, buildNextCategoryRow } from '../utils/roomPresets';
 import {
   X,
   Building2,
@@ -71,22 +72,40 @@ export default function CreateHotelModal() {
     }
   };
 
-  const addCategoryRow = () => {
-    const nextFloorNum = roomCategories.length + 1;
+  const addCategoryRow = (presetName = null) => {
     setRoomCategories(prev => [
       ...prev,
-      {
-        name: nextFloorNum === 2 ? 'Deluxe Room' : `Executive Suite`,
-        count: 2,
-        startRoomNumber: nextFloorNum * 100 + 1,
-        roomNumbers: '',
-        price: nextFloorNum === 2 ? 3500 : 4500,
-        bed: 'King Bed',
-        floor: `Floor ${nextFloorNum}`,
-        areaSqft: 380,
-        maxAdults: 3
-      }
+      buildNextCategoryRow(prev, 0, presetName)
     ]);
+  };
+
+  const handleCategoryPresetChange = (index, selectedVal) => {
+    if (selectedVal === '__custom__') {
+      setRoomCategories(prev =>
+        prev.map((row, idx) => (idx === index ? { ...row, isCustomName: true, name: '' } : row))
+      );
+      return;
+    }
+    const preset = ROOM_TYPE_PRESETS.find(p => p.name === selectedVal);
+    setRoomCategories(prev =>
+      prev.map((row, idx) =>
+        idx === index
+          ? {
+              ...row,
+              isCustomName: false,
+              name: selectedVal,
+              ...(preset
+                ? {
+                    price: preset.price,
+                    bed: preset.bed,
+                    areaSqft: preset.areaSqft,
+                    maxAdults: preset.maxAdults
+                  }
+                : {})
+            }
+          : row
+      )
+    );
   };
 
   const updateCategoryRow = (index, field, value) => {
@@ -172,6 +191,8 @@ export default function CreateHotelModal() {
       setEmail('');
       setPassword('');
       setLogoUrl('');
+      setManualTotalRooms('10');
+      setRoomCategories([]);
       setError('');
     } finally {
       setIsSaving(false);
@@ -474,14 +495,27 @@ export default function CreateHotelModal() {
                 </p>
               </div>
 
-              <button
-                type="button"
-                onClick={addCategoryRow}
-                className="px-3 py-1.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 font-bold text-[11px] flex items-center gap-1 transition cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Pre-Create Initial Room Type (Optional)</span>
-              </button>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {ROOM_TYPE_NAMES.map(presetName => (
+                  <button
+                    key={presetName}
+                    type="button"
+                    onClick={() => addCategoryRow(presetName)}
+                    className="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-emerald-600/20 border border-slate-700 hover:border-emerald-500/40 text-emerald-300 font-bold text-[10.5px] flex items-center gap-1 transition cursor-pointer"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>{presetName}</span>
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => addCategoryRow()}
+                  className="px-3 py-1.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 font-bold text-[11px] flex items-center gap-1 transition cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add Room Type</span>
+                </button>
+              </div>
             </div>
 
             {/* Assigned Room Limit Box */}
@@ -544,16 +578,28 @@ export default function CreateHotelModal() {
                       <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
                         <div className="col-span-2">
                           <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">
-                            Room Category Name *
+                            Room Category Type *
                           </label>
-                          <input
-                            type="text"
-                            required
-                            placeholder="e.g. Standard Room"
-                            value={cat.name}
-                            onChange={(e) => updateCategoryRow(idx, 'name', e.target.value)}
+                          <select
+                            value={cat.isCustomName || (cat.name && !ROOM_TYPE_NAMES.includes(cat.name)) ? '__custom__' : (cat.name || 'Standard Room')}
+                            onChange={(e) => handleCategoryPresetChange(idx, e.target.value)}
                             className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-white font-semibold"
-                          />
+                          >
+                            {ROOM_TYPE_NAMES.map(tName => (
+                              <option key={tName} value={tName}>{tName}</option>
+                            ))}
+                            <option value="__custom__">Custom Room Type...</option>
+                          </select>
+                          {(cat.isCustomName || (cat.name && !ROOM_TYPE_NAMES.includes(cat.name))) && (
+                            <input
+                              type="text"
+                              required
+                              placeholder="Enter custom category name"
+                              value={cat.name}
+                              onChange={(e) => updateCategoryRow(idx, 'name', e.target.value)}
+                              className="w-full mt-1.5 px-3 py-1.5 bg-slate-900 border border-indigo-500/50 rounded-lg text-white font-semibold text-xs"
+                            />
+                          )}
                         </div>
 
                         <div>

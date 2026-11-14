@@ -1,7 +1,29 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { supabase, supabaseUrl, supabaseAnonKey, isSupabaseConfigured } from '../lib/supabase';
+import { normalizeRoomCategoryName } from '../utils/roomPresets';
 
 const SuperAdminContext = createContext(null);
+const PMS_API_URL = `${supabaseUrl}/functions/v1/pms-api`;
+
+async function callPmsProvisionApi(payload) {
+  try {
+    const res = await fetch(PMS_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        apikey: supabaseAnonKey,
+        Authorization: `Bearer ${supabaseAnonKey}`,
+        'x-aavasa-client': 'aavasa-superadmin'
+      },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json().catch(() => null);
+    return { reachable: true, ok: res.ok, status: res.status, data };
+  } catch {
+    return { reachable: false, ok: false, status: 0, data: null };
+  }
+}
 
 const SUPERADMIN_EMAIL = 'superadmin@aavasa.com';
 const SUPERADMIN_PASSWORD = 'aavasa@18';
@@ -344,7 +366,7 @@ export function SuperAdminProvider({ children }) {
 
     for (let idx = 0; idx < roomCategories.length; idx++) {
       const cat = roomCategories[idx];
-      const rawName = String(cat.name || 'Standard Room').trim();
+      const rawName = normalizeRoomCategoryName(cat.name || 'Standard Room');
       const qty = Math.max(0, Number(cat.count) || 0);
       if (!rawName || qty <= 0) continue;
 
@@ -407,6 +429,7 @@ export function SuperAdminProvider({ children }) {
       const roomPayloads = roomNumbersToCreate.map(rNum => ({
         hotel_id: hotelId,
         room_number: rNum,
+        room_type_id: rtId,
         type: rawName,
         floor,
         bed,
@@ -496,50 +519,70 @@ export function SuperAdminProvider({ children }) {
     };
 
     if (isSupabaseConfigured) {
+      const hotelRow = {
+        id: hotel.id,
+        slug: hotel.slug,
+        name: hotel.name,
+        short_name: hotel.shortName,
+        logo_url: hotel.logoUrl || null,
+        owner_name: hotel.ownerName,
+        email: hotel.email,
+        password: hotel.password,
+        mobile: hotel.mobile,
+        address: hotel.address,
+        city: hotel.city,
+        total_rooms: hotel.totalRooms,
+        currency: hotel.currency,
+        currency_symbol: hotel.currencySymbol,
+        status: hotel.status,
+        plan: hotel.plan,
+        commission_rate: hotel.commissionRate
+      };
+
+      const normalizedCategories = roomCategories.map(c => ({
+        ...c,
+        name: normalizeRoomCategoryName(c.name || 'Standard Room')
+      }));
+
       try {
-        // Ensure a completely fresh start for this new Admin credential by removing any leftover data from previous logins
-        await Promise.all([
-          supabase.from('rooms').delete().eq('hotel_id', hotel.id),
-          supabase.from('room_types').delete().eq('hotel_id', hotel.id),
-          supabase.from('reservations').delete().eq('hotel_id', hotel.id),
-          supabase.from('fnb_orders').delete().eq('hotel_id', hotel.id),
-          supabase.from('housekeeping_tasks').delete().eq('hotel_id', hotel.id),
-          supabase.from('cab_bookings').delete().eq('hotel_id', hotel.id),
-          supabase.from('financial_invoices').delete().eq('hotel_id', hotel.id),
-          supabase.from('banquet_bookings').delete().eq('hotel_id', hotel.id)
-        ]);
-
-        const { error } = await supabase.from('hotels').upsert({
-          id: hotel.id,
-          slug: hotel.slug,
-          name: hotel.name,
-          short_name: hotel.shortName,
-          logo_url: hotel.logoUrl || null,
-          owner_name: hotel.ownerName,
-          email: hotel.email,
-          password: hotel.password,
-          mobile: hotel.mobile,
-          address: hotel.address,
-          city: hotel.city,
-          total_rooms: hotel.totalRooms,
-          currency: hotel.currency,
-          currency_symbol: hotel.currencySymbol,
-          status: hotel.status,
-          plan: hotel.plan,
-          commission_rate: hotel.commissionRate
+        // Primary backend endpoint: pms-api Edge Function (atomic provisioning + realtime sync)
+        const apiRes = await callPmsProvisionApi({
+          action: 'provision_hotel_and_rooms',
+          mode: 'create',
+          hotel: hotelRow,
+          roomCategories: normalizedCategories
         });
-        if (error) {
-          console.warn('Supabase hotel insert error:', error);
-          return { success: false, message: `Database error: ${error.message}` };
-        }
 
-        // Provision initial room categories and rooms entered by SuperAdmin
-        if (roomCategories.length > 0) {
-          await provisionRoomsForHotel(hotel.id, roomCategories);
-        }
+        if (apiRes.reachable && apiRes.ok && apiRes.data?.success) {
+          await loadData();
+        } else if (apiRes.reachable && apiRes.status >= 400 && apiRes.status < 500) {
+          return { success: false, message: apiRes.data?.message || 'Could not provision property in backend.' };
+        } else {
+          // Fallback to direct Supabase client writes if Edge Function is temporarily unreachable
+          await Promise.all([
+            supabase.from('rooms').delete().eq('hotel_id', hotel.id),
+            supabase.from('room_types').delete().eq('hotel_id', hotel.id),
+            supabase.from('reservations').delete().eq('hotel_id', hotel.id),
+            supabase.from('fnb_orders').delete().eq('hotel_id', hotel.id),
+            supabase.from('housekeeping_tasks').delete().eq('hotel_id', hotel.id),
+            supabase.from('cab_bookings').delete().eq('hotel_id', hotel.id),
+            supabase.from('financial_invoices').delete().eq('hotel_id', hotel.id),
+            supabase.from('banquet_bookings').delete().eq('hotel_id', hotel.id)
+          ]);
 
-        await broadcastSuperAdminSync({ action: 'hotel_created', hotelId: hotel.id });
-        await loadData();
+          const { error } = await supabase.from('hotels').upsert(hotelRow);
+          if (error) {
+            console.warn('Supabase hotel insert error:', error);
+            return { success: false, message: `Database error: ${error.message}` };
+          }
+
+          if (normalizedCategories.length > 0) {
+            await provisionRoomsForHotel(hotel.id, normalizedCategories);
+          }
+
+          await broadcastSuperAdminSync({ action: 'hotel_created', hotelId: hotel.id });
+          await loadData();
+        }
       } catch (err) {
         console.warn('Supabase hotel insert error:', err);
         return { success: false, message: 'Failed to save credential to Supabase.' };
@@ -584,15 +627,17 @@ export function SuperAdminProvider({ children }) {
     setEditingHotel(null);
 
     if (isSupabaseConfigured) {
-      try {
-        if (newRoomCategories.length > 0 && addedRoomsCount > 0) {
-          await provisionRoomsForHotel(updated.id, newRoomCategories);
-        }
+      const normalizedNewCats = newRoomCategories.map(c => ({
+        ...c,
+        name: normalizeRoomCategoryName(c.name || 'Standard Room')
+      }));
 
+      try {
         const currentDirectRooms = globalRooms.filter(r => r.hotel_id === updated.id).length + addedRoomsCount;
         const resolvedTotalRooms = Math.max(Number(updated.totalRooms) || 0, currentDirectRooms);
 
-        await supabase.from('hotels').update({
+        const updatedHotelRow = {
+          id: updated.id,
           name: cleanName,
           slug: cleanSlug,
           short_name: updated.shortName || cleanName.slice(0, 4).toUpperCase(),
@@ -608,8 +653,23 @@ export function SuperAdminProvider({ children }) {
           plan: updated.plan,
           commission_rate: updated.commissionRate,
           updated_at: new Date().toISOString()
-        }).eq('id', updated.id);
-        await broadcastSuperAdminSync({ action: 'hotel_updated', hotelId: updated.id });
+        };
+
+        const apiRes = await callPmsProvisionApi({
+          action: 'provision_hotel_and_rooms',
+          mode: 'add_rooms',
+          hotel: updatedHotelRow,
+          roomCategories: addedRoomsCount > 0 ? normalizedNewCats : []
+        });
+
+        if (!apiRes.reachable || !apiRes.ok) {
+          if (normalizedNewCats.length > 0 && addedRoomsCount > 0) {
+            await provisionRoomsForHotel(updated.id, normalizedNewCats);
+          }
+
+          await supabase.from('hotels').update(updatedHotelRow).eq('id', updated.id);
+          await broadcastSuperAdminSync({ action: 'hotel_updated', hotelId: updated.id });
+        }
         await loadData();
       } catch (err) {
         console.warn('Supabase hotel update error:', err);
