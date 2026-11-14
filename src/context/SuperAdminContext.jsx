@@ -71,11 +71,33 @@ export function SuperAdminProvider({ children }) {
   // 3. Global Platform Data
   const [globalRooms, setGlobalRooms] = useState([]);
   const [globalReservations, setGlobalReservations] = useState([]);
-  const [activeTab, setActiveTab] = useState('hotels'); // 'hotels' | 'bookings' | 'rooms'
+  const [activeTab, setActiveTab] = useState(() => {
+    try {
+      return localStorage.getItem('aavasa_superadmin_active_tab') || 'hotels';
+    } catch (e) {
+      return 'hotels';
+    }
+  }); // 'hotels' | 'bookings' | 'rooms'
   const [notification, setNotification] = useState(null);
   const [isCreateHotelModalOpen, setIsCreateHotelModalOpen] = useState(false);
   const [editingHotel, setEditingHotel] = useState(null);
   const [isSqlModalOpen, setIsSqlModalOpen] = useState(false);
+
+  // Persist activeTab and keep SuperAdmin session alive across refreshes
+  useEffect(() => {
+    try {
+      if (activeTab) localStorage.setItem('aavasa_superadmin_active_tab', activeTab);
+    } catch (e) { }
+  }, [activeTab]);
+
+  useEffect(() => {
+    try {
+      if (isAuthenticated && currentAdmin) {
+        localStorage.setItem('aavasa_superadmin_auth_v2', 'true');
+        localStorage.setItem('aavasa_superadmin_user_v2', JSON.stringify(currentAdmin));
+      }
+    } catch (e) { }
+  }, [isAuthenticated, currentAdmin]);
 
   // Purge all legacy AuraStay localStorage keys on startup
   useEffect(() => {
@@ -258,6 +280,103 @@ export function SuperAdminProvider({ children }) {
     showNotification('Logged out successfully', 'info');
   };
 
+  // Helper: Provision room categories and physical rooms in Supabase for a hotel
+  const provisionRoomsForHotel = async (hotelId, roomCategories = []) => {
+    if (!isSupabaseConfigured || !hotelId || !Array.isArray(roomCategories) || roomCategories.length === 0) {
+      return 0;
+    }
+
+    let createdCount = 0;
+
+    for (let idx = 0; idx < roomCategories.length; idx++) {
+      const cat = roomCategories[idx];
+      const rawName = String(cat.name || 'Standard Room').trim();
+      const qty = Math.max(0, Number(cat.count) || 0);
+      if (!rawName || qty <= 0) continue;
+
+      const price = Number(cat.price) || 2500;
+      const bed = String(cat.bed || 'King Bed').trim();
+      const floor = String(cat.floor || 'Floor 1').trim();
+      const areaSqft = Number(cat.areaSqft) || 320;
+      const maxAdults = Number(cat.maxAdults) || 2;
+      const description = String(cat.description || `Comfortable ${rawName} featuring modern amenities and high-speed Wi-Fi.`).trim();
+
+      const rtId = `rt-${hotelId.slice(0, 8)}-${rawName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+
+      // 1. Upsert Room Type in public.room_types
+      try {
+        await supabase.from('room_types').upsert({
+          id: rtId,
+          hotel_id: hotelId,
+          name: rawName,
+          label: 'Room',
+          bedding_type: bed,
+          max_adults: maxAdults,
+          max_extra: 1,
+          max_children: 1,
+          area_sqft: areaSqft,
+          base_price: price,
+          extra_bed_price: 800,
+          child_price: 400,
+          amenities: [
+            'High-speed Optic Fiber Wi-Fi',
+            'Individual Split Air Conditioning',
+            '43-inch 4K Smart TV',
+            'Ensuite Bathroom with 24/7 Hot Water',
+            'Daily Housekeeping'
+          ],
+          description,
+          is_booking_engine: true
+        });
+      } catch (e) {
+        console.warn('Supabase room_types upsert notice:', e);
+      }
+
+      // 2. Generate Room Numbers (either explicit comma-separated or sequential from startRoomNumber)
+      const explicitNums = String(cat.roomNumbers || '')
+        .split(',')
+        .map(s => s.trim())
+        .filter(Boolean);
+
+      const startNum = Number(cat.startRoomNumber) || ((idx + 1) * 100 + 1);
+      const roomNumbersToCreate = [];
+
+      for (let i = 0; i < qty; i++) {
+        if (explicitNums[i]) {
+          roomNumbersToCreate.push(explicitNums[i]);
+        } else {
+          roomNumbersToCreate.push(String(startNum + i));
+        }
+      }
+
+      // 3. Insert physical rooms into public.rooms
+      const roomPayloads = roomNumbersToCreate.map(rNum => ({
+        hotel_id: hotelId,
+        room_number: rNum,
+        type: rawName,
+        floor,
+        bed,
+        status: 'VACANT_READY',
+        price,
+        housekeeping: 'Clean',
+        key_card_no: `CARD-${rNum}`,
+        is_smoking: false,
+        phone_extension: rNum
+      }));
+
+      for (const rp of roomPayloads) {
+        // Remove existing room with same room_number first to prevent conflicts
+        await supabase.from('rooms').delete().eq('room_number', rp.room_number);
+        const { error: rmErr } = await supabase.from('rooms').insert(rp);
+        if (!rmErr) {
+          createdCount += 1;
+        }
+      }
+    }
+
+    return createdCount;
+  };
+
   // 6. Admin Credential & Tenant Management Actions
   const addHotel = async (newHotel) => {
     const cleanEmail = String(newHotel.email || '').trim().toLowerCase();
@@ -297,6 +416,10 @@ export function SuperAdminProvider({ children }) {
     const hotelId = newHotel.id || cleanSlug;
     const shortCode = (newHotel.shortName || cleanName.replace(/[^a-zA-Z0-9]/g, '').slice(0, 4) || 'HTL').toUpperCase();
 
+    const roomCategories = Array.isArray(newHotel.roomCategories) ? newHotel.roomCategories : [];
+    const categoryRoomsSum = roomCategories.reduce((sum, c) => sum + (Math.max(0, Number(c.count) || 0)), 0);
+    const resolvedTotalRooms = categoryRoomsSum > 0 ? categoryRoomsSum : (Number(newHotel.totalRooms) || 0);
+
     const hotel = {
       ...newHotel,
       id: hotelId,
@@ -309,7 +432,7 @@ export function SuperAdminProvider({ children }) {
       mobile: newHotel.mobile?.trim() || '+91 98765 43210',
       address: newHotel.address?.trim() || `${newHotel.city || 'Bengaluru'}, India`,
       city: newHotel.city?.trim() || 'Bengaluru',
-      totalRooms: Number(newHotel.totalRooms) || 20,
+      totalRooms: resolvedTotalRooms,
       currency: newHotel.currency || 'INR',
       currencySymbol: newHotel.currencySymbol || '₹',
       status: newHotel.status || 'ACTIVE',
@@ -355,6 +478,12 @@ export function SuperAdminProvider({ children }) {
           console.warn('Supabase hotel insert error:', error);
           return { success: false, message: `Database error: ${error.message}` };
         }
+
+        // Provision initial room categories and rooms entered by SuperAdmin
+        if (roomCategories.length > 0) {
+          await provisionRoomsForHotel(hotel.id, roomCategories);
+        }
+
         await broadcastSuperAdminSync({ action: 'hotel_created', hotelId: hotel.id });
         await loadData();
       } catch (err) {
@@ -364,7 +493,11 @@ export function SuperAdminProvider({ children }) {
     }
 
     setHotels(prev => [hotel, ...prev.filter(h => h.id !== hotel.id && h.email !== hotel.email)]);
-    showNotification(`Admin credential created! Login: ${hotel.email} | Password: ${hotel.password}`);
+    showNotification(
+      categoryRoomsSum > 0
+        ? `Admin credential & ${categoryRoomsSum} rooms created! Login: ${hotel.email}`
+        : `Admin credential created! Login: ${hotel.email} | Password: ${hotel.password}`
+    );
     setIsCreateHotelModalOpen(false);
     return { success: true, hotel };
   };
@@ -385,15 +518,30 @@ export function SuperAdminProvider({ children }) {
       return { success: false, message: 'Admin password must be at least 6 characters.' };
     }
 
+    const newRoomCategories = Array.isArray(updated.newRoomCategories) ? updated.newRoomCategories : [];
+    const addedRoomsCount = newRoomCategories.reduce((sum, c) => sum + (Math.max(0, Number(c.count) || 0)), 0);
+
     setHotels(prev => prev.map(h => h.id === updated.id ? { ...h, ...updated, email: cleanEmail, password: cleanPassword, name: cleanName, slug: cleanSlug } : h));
-    showNotification(`Admin credentials for "${cleanName}" updated in Supabase`);
+    showNotification(
+      addedRoomsCount > 0
+        ? `Updated "${cleanName}" and added ${addedRoomsCount} new room(s) in Supabase`
+        : `Admin credentials & details for "${cleanName}" updated in Supabase`
+    );
     setEditingHotel(null);
 
     if (isSupabaseConfigured) {
       try {
+        if (newRoomCategories.length > 0 && addedRoomsCount > 0) {
+          await provisionRoomsForHotel(updated.id, newRoomCategories);
+        }
+
+        const currentDirectRooms = globalRooms.filter(r => r.hotel_id === updated.id).length + addedRoomsCount;
+        const resolvedTotalRooms = Math.max(Number(updated.totalRooms) || 0, currentDirectRooms);
+
         await supabase.from('hotels').update({
           name: cleanName,
           slug: cleanSlug,
+          short_name: updated.shortName || cleanName.slice(0, 4).toUpperCase(),
           logo_url: updated.logoUrl,
           owner_name: updated.ownerName,
           email: cleanEmail,
@@ -401,7 +549,7 @@ export function SuperAdminProvider({ children }) {
           mobile: updated.mobile,
           address: updated.address,
           city: updated.city,
-          total_rooms: updated.totalRooms,
+          total_rooms: resolvedTotalRooms,
           status: updated.status,
           plan: updated.plan,
           commission_rate: updated.commissionRate,
@@ -505,6 +653,7 @@ export function SuperAdminProvider({ children }) {
       deleteHotel,
       toggleHotelStatus,
       deleteRoom,
+      provisionRoomsForHotel,
       refreshData: loadData
     }}>
       {children}
