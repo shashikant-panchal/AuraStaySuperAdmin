@@ -406,8 +406,8 @@ export function SuperAdminProvider({ children }) {
       }));
 
       for (const rp of roomPayloads) {
-        // Remove existing room with same room_number first to prevent conflicts
-        await supabase.from('rooms').delete().eq('room_number', rp.room_number);
+        // Remove existing room with same hotel_id & room_number first to prevent conflicts
+        await supabase.from('rooms').delete().eq('hotel_id', hotelId).eq('room_number', rp.room_number);
         const { error: rmErr } = await supabase.from('rooms').insert(rp);
         if (!rmErr) {
           createdCount += 1;
@@ -659,18 +659,26 @@ export function SuperAdminProvider({ children }) {
     }
   };
 
-  const deleteRoom = async (roomId, roomNumber) => {
-    setGlobalRooms(prev => prev.filter(r => r.id !== roomId && r.room_number !== roomNumber));
+  const deleteRoom = async (roomId, roomNumber, hotelId) => {
+    setGlobalRooms(prev =>
+      prev.filter(r =>
+        roomId
+          ? r.id !== roomId
+          : !(r.room_number === roomNumber && (!hotelId || r.hotel_id === hotelId))
+      )
+    );
     showNotification(`Room #${roomNumber} deleted by SuperAdmin.`);
 
     if (isSupabaseConfigured) {
       try {
         if (roomId) {
           await supabase.from('rooms').delete().eq('id', roomId);
+        } else if (roomNumber && hotelId) {
+          await supabase.from('rooms').delete().eq('hotel_id', hotelId).eq('room_number', roomNumber);
         } else if (roomNumber) {
           await supabase.from('rooms').delete().eq('room_number', roomNumber);
         }
-        await broadcastSuperAdminSync({ action: 'room_delete', roomNumber });
+        await broadcastSuperAdminSync({ action: 'room_delete', roomNumber, hotelId });
         await loadData();
       } catch (err) {
         console.warn('Supabase room delete error:', err);

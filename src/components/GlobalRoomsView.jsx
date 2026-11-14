@@ -183,7 +183,7 @@ export default function GlobalRoomsView() {
               <button
                 type="button"
                 onClick={() => {
-                  deleteRoom(roomToDelete.id, roomToDelete.room_number);
+                  deleteRoom(roomToDelete.id, roomToDelete.room_number, roomToDelete.hotel_id);
                   setRoomToDelete(null);
                 }}
                 className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-lg shadow-rose-600/30 flex items-center space-x-1.5 transition cursor-pointer"

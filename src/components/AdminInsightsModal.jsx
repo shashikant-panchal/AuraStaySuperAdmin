@@ -562,7 +562,7 @@ export default function AdminInsightsModal() {
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    deleteRoom(rm.id, rm.room_number);
+                                    deleteRoom(rm.id, rm.room_number, hotel.id);
                                     setConfirmDeleteRoomObj(null);
                                   }}
                                   className="px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-[10px] cursor-pointer"

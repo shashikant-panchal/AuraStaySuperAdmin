@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useSuperAdmin } from '../context/SuperAdminContext';
-import { X, Save, KeyRound, Mail, Sparkles, BedDouble, Plus, Trash2, Building2 } from 'lucide-react';
+import { compressLogoImageFile } from '../utils/imageUpload';
+import { X, Save, KeyRound, Mail, Sparkles, BedDouble, Plus, Trash2, Building2, Upload, Image as ImageIcon } from 'lucide-react';
 
 export default function EditHotelModal() {
   const { editingHotel, setEditingHotel, updateHotel, globalRooms, deleteRoom } = useSuperAdmin();
@@ -271,6 +272,60 @@ export default function EditHotelModal() {
                 />
               </div>
             </div>
+
+            {/* Client Property Logo */}
+            <div className="p-3 bg-slate-950/90 border border-slate-800 rounded-xl flex flex-col sm:flex-row items-start sm:items-center gap-4">
+              <div className="w-14 h-14 rounded-xl bg-slate-900 border border-slate-700 flex items-center justify-center overflow-hidden shrink-0">
+                {logoUrl ? (
+                  <img src={logoUrl} alt={name || 'Logo'} className="w-full h-full object-contain p-1 bg-white" />
+                ) : (
+                  <ImageIcon className="w-5 h-5 text-slate-600" />
+                )}
+              </div>
+              <div className="flex-1 w-full space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <label className="text-xs font-semibold text-slate-300">Client Property Logo</label>
+                  {logoUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setLogoUrl('')}
+                      className="text-[11px] font-semibold text-rose-400 hover:text-rose-300 cursor-pointer"
+                    >
+                      Remove Logo
+                    </button>
+                  )}
+                </div>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <label className="px-3 py-1.5 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/40 text-indigo-300 font-bold text-[11px] flex items-center justify-center gap-1.5 cursor-pointer shrink-0 transition">
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>Upload Logo</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        try {
+                          const dataUrl = await compressLogoImageFile(file);
+                          setLogoUrl(dataUrl);
+                        } catch (_err) {
+                          setError('Could not process logo image file.');
+                        }
+                        e.target.value = '';
+                      }}
+                    />
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Or paste logo image URL (https://...)"
+                    value={logoUrl.startsWith('data:') ? '' : logoUrl}
+                    onChange={(e) => setLogoUrl(e.target.value)}
+                    className="flex-1 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl text-white text-xs placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Existing & Add Rooms Section */}
@@ -302,7 +357,7 @@ export default function EditHotelModal() {
                     <span className="text-emerald-400 font-mono">₹{rm.price}</span>
                     <button
                       type="button"
-                      onClick={() => deleteRoom(rm.id, rm.room_number)}
+                      onClick={() => deleteRoom(rm.id, rm.room_number, editingHotel.id)}
                       className="text-slate-500 hover:text-rose-400 ml-1 cursor-pointer"
                       title="Delete room"
                     >

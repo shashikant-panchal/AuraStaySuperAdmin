@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useSuperAdmin } from '../context/SuperAdminContext';
+import { compressLogoImageFile } from '../utils/imageUpload';
 import {
   X,
   Building2,
@@ -14,7 +15,9 @@ import {
   Trash2,
   MapPin,
   Phone,
-  User
+  User,
+  Upload,
+  Image as ImageIcon
 } from 'lucide-react';
 
 export default function CreateHotelModal() {
@@ -168,6 +171,7 @@ export default function CreateHotelModal() {
       setAddress('');
       setEmail('');
       setPassword('');
+      setLogoUrl('');
       setError('');
     } finally {
       setIsSaving(false);
@@ -226,7 +230,7 @@ export default function CreateHotelModal() {
                   <input
                     type="text"
                     required
-                    placeholder="e.g. admin@shivanandi.com"
+                    placeholder="Enter email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="w-full pl-9 pr-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
@@ -397,6 +401,62 @@ export default function CreateHotelModal() {
                   <option value="Pro">Pro Suite</option>
                   <option value="Starter">Starter</option>
                 </select>
+              </div>
+            </div>
+
+            {/* Client Brand Logo (Shown on Client Admin PMS & Vouchers) */}
+            <div className="p-3 bg-slate-950/90 border border-slate-800 rounded-xl flex flex-col sm:flex-row items-start sm:items-center gap-4">
+              <div className="w-16 h-16 rounded-2xl bg-slate-900 border border-slate-700 flex items-center justify-center overflow-hidden shrink-0">
+                {logoUrl ? (
+                  <img src={logoUrl} alt={name || 'Client Logo'} className="w-full h-full object-contain p-1 bg-white" />
+                ) : (
+                  <ImageIcon className="w-6 h-6 text-slate-600" />
+                )}
+              </div>
+              <div className="flex-1 w-full space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <label className="text-xs font-semibold text-slate-200">
+                    Property Brand Logo (Optional)
+                  </label>
+                  {logoUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setLogoUrl('')}
+                      className="text-[11px] font-semibold text-rose-400 hover:text-rose-300 cursor-pointer"
+                    >
+                      Remove Logo
+                    </button>
+                  )}
+                </div>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <label className="px-3.5 py-2 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/40 text-indigo-300 font-bold text-[11px] flex items-center justify-center gap-1.5 cursor-pointer shrink-0 transition">
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>Upload Logo</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        try {
+                          const dataUrl = await compressLogoImageFile(file);
+                          setLogoUrl(dataUrl);
+                        } catch (_err) {
+                          setError('Could not process logo image file.');
+                        }
+                        e.target.value = '';
+                      }}
+                    />
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Or paste logo image URL (https://...)"
+                    value={logoUrl.startsWith('data:') ? '' : logoUrl}
+                    onChange={(e) => setLogoUrl(e.target.value)}
+                    className="flex-1 px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white text-xs placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
               </div>
             </div>
           </div>
