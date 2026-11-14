@@ -389,23 +389,12 @@ ALTER TABLE IF EXISTS financial_invoices DISABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS lost_and_found_items DISABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS material_requisitions DISABLE ROW LEVEL SECURITY;
 
--- 11. Clean Reset: Clear all old test reservations and reset room inventory
+-- 11. Clean Reset: Clear all old entries and credentials for a clean database start
+-- All Hotel Admin credentials are provisioned exclusively via AuraStaySuperAdmin.
 DELETE FROM reservations;
-UPDATE rooms SET status = 'VACANT_READY', guest = NULL, booking_id = NULL, check_out = NULL;
+DELETE FROM rooms;
+DELETE FROM room_types;
+DELETE FROM hotels;
 DELETE FROM banquet_bookings;
 DELETE FROM fnb_orders;
-
--- 11. Initial Seed Data (Exceed HMS Room Category Master & Demo Property)
-INSERT INTO hotels (id, slug, name, short_name, owner_name, email, password, mobile, total_rooms, plan)
-VALUES ('hotel_aurastay_01', 'demo-hotel-property-1', 'DEMO HOTEL Property 1', 'DEMO', 'SHIVANANDI', 'shivanandi@aurastay.com', '12345', '7978578046', 20, 'Enterprise')
-ON CONFLICT (id) DO UPDATE SET 
-    name = EXCLUDED.name,
-    owner_name = EXCLUDED.owner_name;
-
-INSERT INTO room_types (id, hotel_id, name, label, bedding_type, max_adults, max_extra, max_children, area_sqft, base_price, extra_bed_price, child_price, amenities, description, is_booking_engine)
-VALUES
-('rt-deluxe', 'hotel_aurastay_01', 'Deluxe Room', 'Room', 'King Bed', 2, 1, 1, 350.00, 2500.00, 800.00, 400.00, ARRAY['Air Conditioning', 'Flat-screen Smart TV', 'Free High-Speed Wi-Fi', 'Private Bathroom', 'Daily Housekeeping', 'Electric Kettle'], 'Spacious deluxe room featuring plush king bedding, work desk, and ensuite bath.', true),
-('rt-exec', 'hotel_aurastay_01', 'Executive Suite', 'Suite', 'Suite', 3, 1, 2, 550.00, 4500.00, 1000.00, 500.00, ARRAY['Air Conditioning', 'Balcony', 'City view', 'Bathtub', 'Flat-screen Smart TV', 'Free High-Speed Wi-Fi', 'Minibar'], 'Luxury executive suite with dedicated living room area and private balcony.', true),
-('rt-pres', 'hotel_aurastay_01', 'Presidential Suite', 'Suite', '2 King Bed(s)', 4, 2, 2, 850.00, 8000.00, 1500.00, 800.00, ARRAY['Air Conditioning', 'Balcony', 'City view', 'Bathtub', 'Flat-screen Smart TV', 'Free High-Speed Wi-Fi', 'Minibar', 'Safe', 'Wardrobe or closet'], 'Ultra-premium presidential suite with master bedrooms, private dining, and jacuzzi.', true),
-('rt-std', 'hotel_aurastay_01', 'Standard Room', 'Room', 'Twin Beds', 2, 0, 1, 280.00, 1800.00, 600.00, 300.00, ARRAY['Air Conditioning', 'Free High-Speed Wi-Fi', 'Private Bathroom', 'Daily Housekeeping'], 'Cozy standard room ideal for business and leisure travelers.', true)
-ON CONFLICT (id) DO NOTHING;
+DELETE FROM guest_users;

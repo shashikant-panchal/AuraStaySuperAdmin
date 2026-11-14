@@ -16,13 +16,16 @@ import {
   CheckCircle2,
   AlertTriangle,
   MoreVertical,
-  Plus
+  Plus,
+  Trash2,
+  Copy
 } from 'lucide-react';
 
 export default function HotelsTableView() {
   const {
     hotels,
     toggleHotelStatus,
+    deleteHotel,
     setEditingHotel,
     setIsCreateHotelModalOpen,
     globalRooms,
@@ -222,6 +225,18 @@ export default function HotelsTableView() {
                           <ExternalLink className="w-3.5 h-3.5" />
                         </a>
 
+                        {/* Copy Login Credentials */}
+                        <button
+                          onClick={() => {
+                            navigator.clipboard?.writeText(`Email: ${h.email} | Slug: ${h.slug} | Password: ${h.password}`);
+                            showNotification(`Copied Admin login credentials for ${h.name}`);
+                          }}
+                          className="p-1.5 rounded-lg bg-slate-800 hover:bg-amber-500/20 text-slate-400 hover:text-amber-400 transition"
+                          title="Copy Hotel Admin Login Credentials"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                        </button>
+
                         {/* Edit Hotel */}
                         <button
                           onClick={() => setEditingHotel(h)}
@@ -241,6 +256,15 @@ export default function HotelsTableView() {
                           title={h.status === 'ACTIVE' ? 'Suspend Hotel' : 'Activate Hotel'}
                         >
                           <Power className="w-3.5 h-3.5" />
+                        </button>
+
+                        {/* Delete Credential */}
+                        <button
+                          onClick={() => deleteHotel(h.id)}
+                          className="p-1.5 rounded-lg bg-slate-800 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 transition"
+                          title="Delete Hotel & Revoke Admin Credential"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     </td>

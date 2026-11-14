@@ -28,7 +28,7 @@ export default function CreateHotelModal() {
   const [slug, setSlug] = useState('');
   const [ownerName, setOwnerName] = useState('');
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('hotel123');
+  const [password, setPassword] = useState('');
   const [mobile, setMobile] = useState('');
   const [address, setAddress] = useState('');
   const [city, setCity] = useState('');
@@ -40,6 +40,15 @@ export default function CreateHotelModal() {
 
   if (!isCreateHotelModalOpen) return null;
 
+  const generateSecurePassword = () => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#';
+    let pass = '';
+    for (let i = 0; i < 10; i++) {
+      pass += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    setPassword(pass);
+  };
+
   // Auto-generate slug and email preview
   const handleNameChange = (val) => {
     setName(val);
@@ -50,14 +59,14 @@ export default function CreateHotelModal() {
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!name.trim() || !slug.trim() || !email.trim() || !password.trim()) {
       setError('Hotel Name, Slug, Admin Email and Password are required.');
       return;
     }
 
-    addHotel({
+    await addHotel({
       name: name.trim(),
       slug: slug.trim().toLowerCase(),
       ownerName: ownerName.trim() || `${name.trim()} Admin`,
@@ -65,7 +74,7 @@ export default function CreateHotelModal() {
       password: password.trim(),
       mobile: mobile.trim() || '+91 98765 43210',
       address: address.trim() || `${city || 'City Center'}, India`,
-      city: city.trim() || 'Bhubaneswar',
+      city: city.trim() || 'Bengaluru',
       totalRooms: Number(totalRooms) || 20,
       logoUrl: logoUrl.trim(),
       plan,
@@ -74,6 +83,12 @@ export default function CreateHotelModal() {
       currencySymbol: '₹',
       status: 'ACTIVE'
     });
+    setName('');
+    setSlug('');
+    setOwnerName('');
+    setEmail('');
+    setPassword('');
+    setError('');
   };
 
   return (
@@ -161,13 +176,23 @@ export default function CreateHotelModal() {
               </div>
 
               <div>
-                <label className="block text-slate-300 font-semibold mb-1">Admin Login Password *</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-slate-300 font-semibold">Admin Login Password *</label>
+                  <button
+                    type="button"
+                    onClick={generateSecurePassword}
+                    className="text-[10px] font-bold text-indigo-400 hover:text-indigo-300 flex items-center gap-1"
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    <span>Generate Password</span>
+                  </button>
+                </div>
                 <div className="relative">
                   <KeyRound className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
                   <input
                     type="text"
                     required
-                    placeholder="hotel123"
+                    placeholder="Enter custom admin password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="w-full pl-9 pr-3.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"

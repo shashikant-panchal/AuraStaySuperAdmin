@@ -47,29 +47,13 @@ ALTER PUBLICATION supabase_realtime ADD TABLE hotels;
 ALTER PUBLICATION supabase_realtime ADD TABLE rooms;
 ALTER PUBLICATION supabase_realtime ADD TABLE reservations;
 
--- 4. Enable RLS and public policies
-ALTER TABLE hotels ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Public read/write hotels" ON hotels FOR ALL USING (true) WITH CHECK (true);
+-- 4. Disable RLS so SuperAdmin, Hotel Admin, and Guest Booking sync seamlessly
+ALTER TABLE IF EXISTS hotels DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS rooms DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS reservations DISABLE ROW LEVEL SECURITY;
 
--- 5. Seed Primary Hotel
-INSERT INTO hotels (id, slug, name, short_name, logo_url, owner_name, email, password, mobile, address, city, total_rooms, status, plan)
-VALUES (
-    'hotel_aurastay_01',
-    'aurastay-suite',
-    'AuraStay Suite',
-    'AST',
-    'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=200&q=80',
-    'AuraStay Admin',
-    'admin@aurastay.com',
-    'admin123',
-    '7978578046',
-    'DLF Cyber City, Patia, Bhubaneswar, Odisha, India',
-    'Bhubaneswar',
-    28,
-    'ACTIVE',
-    'Enterprise'
-)
-ON CONFLICT (id) DO NOTHING;`;
+-- 5. Clean Slate: No seed hotels or default credentials.
+-- Create Hotel Admin credentials directly in the SuperAdmin portal.`;
 
 export default function DatabaseSyncModal() {
   const { isSqlModalOpen, setIsSqlModalOpen, showNotification } = useSuperAdmin();

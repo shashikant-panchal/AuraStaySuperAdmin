@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 const SuperAdminContext = createContext(null);
@@ -10,28 +10,21 @@ const DEFAULT_SUPER_ADMIN = {
   role: 'PLATFORM_OWNER'
 };
 
-const INITIAL_HOTELS = [
-  {
-    id: 'hotel_aurastay_01',
-    slug: 'aurastay-suite',
-    name: 'AuraStay Suite',
-    shortName: 'AST',
-    logoUrl: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=200&q=80',
-    ownerName: 'AuraStay Admin',
-    email: 'admin@aurastay.com',
-    password: 'admin123',
-    mobile: '7978578046',
-    address: 'DLF Cyber City, Patia, Bhubaneswar, Odisha, India',
-    city: 'Bhubaneswar',
-    totalRooms: 28,
-    currency: 'INR',
-    currencySymbol: '₹',
-    status: 'ACTIVE',
-    plan: 'Enterprise',
-    commissionRate: 10,
-    createdAt: '2026-11-01T10:00:00Z'
-  }
-];
+async function broadcastSuperAdminSync(payload) {
+  if (!isSupabaseConfigured || !supabase) return;
+  try {
+    const channel = supabase.channel('aurastay_sync_broadcast');
+    await channel.send({
+      type: 'broadcast',
+      event: 'webhook_update',
+      payload: {
+        ...payload,
+        timestamp: new Date().toISOString()
+      }
+    });
+    supabase.removeChannel(channel);
+  } catch (e) { }
+}
 
 export function SuperAdminProvider({ children }) {
   // 1. Auth State
@@ -44,16 +37,8 @@ export function SuperAdminProvider({ children }) {
     return saved ? JSON.parse(saved) : DEFAULT_SUPER_ADMIN;
   });
 
-  // 2. Tenants State
-  const [hotels, setHotels] = useState(() => {
-    try {
-      const saved = localStorage.getItem('aurastay_saas_hotels');
-      if (saved) return JSON.parse(saved);
-    } catch (e) {
-      console.warn('Failed to load hotels from storage', e);
-    }
-    return INITIAL_HOTELS;
-  });
+  // 2. Tenants State (Strictly from Supabase Backend - no localStorage or hardcoded hotels)
+  const [hotels, setHotels] = useState([]);
 
   // 3. Global Platform Data
   const [globalRooms, setGlobalRooms] = useState([]);
@@ -64,14 +49,12 @@ export function SuperAdminProvider({ children }) {
   const [editingHotel, setEditingHotel] = useState(null);
   const [isSqlModalOpen, setIsSqlModalOpen] = useState(false);
 
-  // Sync hotels to localStorage
+  // Remove any legacy localStorage hotel caches on startup
   useEffect(() => {
     try {
-      localStorage.setItem('aurastay_saas_hotels', JSON.stringify(hotels));
-    } catch (e) {
-      console.warn('LocalStorage save failed', e);
-    }
-  }, [hotels]);
+      localStorage.removeItem('aurastay_saas_hotels');
+    } catch (e) { }
+  }, []);
 
   const showNotification = (msg, type = 'success') => {
     setNotification({ msg, type, id: Date.now() });
@@ -80,68 +63,77 @@ export function SuperAdminProvider({ children }) {
     }, 4000);
   };
 
-  // 4. Fetch Supabase Data
+  // 4. Fetch Live Supabase Data
+  const loadData = useCallback(async () => {
+    if (!isSupabaseConfigured) return;
+    try {
+      const [hotelsRes, roomsRes, resRes] = await Promise.all([
+        supabase.from('hotels').select('*').order('created_at', { ascending: false }),
+        supabase.from('rooms').select('*'),
+        supabase.from('reservations').select('*').order('created_at', { ascending: false })
+      ]);
+
+      if (!hotelsRes.error && Array.isArray(hotelsRes.data)) {
+        setHotels(hotelsRes.data.map(h => ({
+          id: h.id,
+          slug: h.slug || h.id,
+          name: h.name,
+          shortName: h.short_name || 'AST',
+          logoUrl: h.logo_url || '',
+          ownerName: h.owner_name,
+          email: h.email,
+          password: h.password,
+          mobile: h.mobile,
+          address: h.address,
+          city: h.city,
+          totalRooms: Number(h.total_rooms) || 0,
+          currency: h.currency || 'INR',
+          currencySymbol: h.currency_symbol || '₹',
+          status: h.status || 'ACTIVE',
+          plan: h.plan || 'Enterprise',
+          commissionRate: Number(h.commission_rate) || 10,
+          createdAt: h.created_at
+        })));
+      }
+
+      if (Array.isArray(roomsRes.data)) {
+        setGlobalRooms(roomsRes.data);
+      }
+
+      if (Array.isArray(resRes.data)) {
+        setGlobalReservations(resRes.data);
+      }
+    } catch (err) {
+      console.warn('Super Admin Supabase load error:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+    const pollTimer = setInterval(() => {
+      loadData();
+    }, 4000);
+    return () => clearInterval(pollTimer);
+  }, [loadData]);
+
   useEffect(() => {
     if (!isSupabaseConfigured) return;
-    let isMounted = true;
 
-    async function loadData() {
-      try {
-        // Fetch hotels
-        const { data: hotelsData, error: hotelsErr } = await supabase.from('hotels').select('*').order('created_at', { ascending: false });
-        if (!hotelsErr && hotelsData && hotelsData.length > 0 && isMounted) {
-          setHotels(hotelsData.map(h => ({
-            id: h.id,
-            slug: h.slug,
-            name: h.name,
-            shortName: h.short_name || 'AST',
-            logoUrl: h.logo_url || '',
-            ownerName: h.owner_name,
-            email: h.email,
-            password: h.password,
-            mobile: h.mobile,
-            address: h.address,
-            city: h.city,
-            totalRooms: h.total_rooms || 20,
-            currency: h.currency || 'INR',
-            currencySymbol: h.currency_symbol || '₹',
-            status: h.status || 'ACTIVE',
-            plan: h.plan || 'Enterprise',
-            commissionRate: h.commission_rate || 10,
-            createdAt: h.created_at
-          })));
-        }
-
-        // Fetch rooms
-        const { data: roomsData } = await supabase.from('rooms').select('*');
-        if (roomsData && isMounted) {
-          setGlobalRooms(roomsData);
-        }
-
-        // Fetch reservations
-        const { data: resData } = await supabase.from('reservations').select('*').order('created_at', { ascending: false });
-        if (resData && isMounted) {
-          setGlobalReservations(resData);
-        }
-      } catch (err) {
-        console.warn('Super Admin Supabase load error:', err);
-      }
-    }
-
-    loadData();
-
-    // Setup Realtime subscriptions
     const channel = supabase.channel('superadmin_realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'hotels' }, () => loadData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'rooms' }, () => loadData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'reservations' }, () => loadData())
       .subscribe();
 
+    const broadcastChannel = supabase.channel('aurastay_sync_broadcast')
+      .on('broadcast', { event: 'webhook_update' }, () => loadData())
+      .subscribe();
+
     return () => {
-      isMounted = false;
       supabase.removeChannel(channel);
+      supabase.removeChannel(broadcastChannel);
     };
-  }, []);
+  }, [loadData]);
 
   // 5. Authentication Actions
   const login = (email, password) => {
@@ -170,23 +162,25 @@ export function SuperAdminProvider({ children }) {
     showNotification('Logged out successfully', 'info');
   };
 
-  // 6. Tenant Management Actions
+  // 6. Tenant & Admin Credential Management Actions
   const addHotel = async (newHotel) => {
-    const hotelId = newHotel.id || `hotel_${newHotel.slug.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_${Date.now().toString().slice(-4)}`;
+    const cleanSlug = (newHotel.slug || newHotel.name || 'hotel').replace(/[^a-z0-9-]/gi, '-').toLowerCase();
+    const hotelId = newHotel.id || cleanSlug;
     const hotel = {
       ...newHotel,
       id: hotelId,
+      slug: cleanSlug,
+      shortName: newHotel.shortName || newHotel.name.slice(0, 4).toUpperCase(),
       createdAt: new Date().toISOString()
     };
 
     setHotels(prev => [hotel, ...prev.filter(h => h.id !== hotel.id && h.email !== hotel.email)]);
-    showNotification(`Tenant hotel "${hotel.name}" created with admin login: ${hotel.email}`);
+    showNotification(`Hotel Admin credential created! Login: ${hotel.email} / Pass: ${hotel.password}`);
     setIsCreateHotelModalOpen(false);
 
-    // Save to Supabase
     if (isSupabaseConfigured) {
       try {
-        await supabase.from('hotels').insert({
+        const { error } = await supabase.from('hotels').upsert({
           id: hotel.id,
           slug: hotel.slug,
           name: hotel.name,
@@ -201,19 +195,24 @@ export function SuperAdminProvider({ children }) {
           total_rooms: hotel.totalRooms,
           currency: hotel.currency,
           currency_symbol: hotel.currencySymbol,
-          status: hotel.status,
+          status: hotel.status || 'ACTIVE',
           plan: hotel.plan,
           commission_rate: hotel.commissionRate
         });
+        if (error) {
+          console.warn('Supabase hotel insert error:', error);
+        }
+        await broadcastSuperAdminSync({ action: 'hotel_created', hotelId: hotel.id });
+        await loadData();
       } catch (err) {
-        console.warn('Supabase hotel insert synced locally', err);
+        console.warn('Supabase hotel insert error:', err);
       }
     }
   };
 
   const updateHotel = async (updated) => {
     setHotels(prev => prev.map(h => h.id === updated.id ? { ...h, ...updated } : h));
-    showNotification(`Tenant "${updated.name}" updated successfully`);
+    showNotification(`Hotel Admin "${updated.name}" credentials & details updated in Supabase`);
     setEditingHotel(null);
 
     if (isSupabaseConfigured) {
@@ -233,8 +232,26 @@ export function SuperAdminProvider({ children }) {
           plan: updated.plan,
           commission_rate: updated.commissionRate
         }).eq('id', updated.id);
+        await broadcastSuperAdminSync({ action: 'hotel_updated', hotelId: updated.id });
+        await loadData();
       } catch (err) {
-        console.warn('Supabase hotel update synced locally', err);
+        console.warn('Supabase hotel update error:', err);
+      }
+    }
+  };
+
+  const deleteHotel = async (hotelId) => {
+    const target = hotels.find(h => h.id === hotelId);
+    setHotels(prev => prev.filter(h => h.id !== hotelId));
+    showNotification(`Hotel credential "${target?.name || hotelId}" permanently removed from Supabase.`, 'info');
+
+    if (isSupabaseConfigured) {
+      try {
+        await supabase.from('hotels').delete().eq('id', hotelId);
+        await broadcastSuperAdminSync({ action: 'hotel_deleted', hotelId });
+        await loadData();
+      } catch (err) {
+        console.warn('Supabase hotel delete error:', err);
       }
     }
   };
@@ -257,6 +274,8 @@ export function SuperAdminProvider({ children }) {
         } else if (roomNumber) {
           await supabase.from('rooms').delete().eq('room_number', roomNumber);
         }
+        await broadcastSuperAdminSync({ action: 'room_delete', roomNumber });
+        await loadData();
       } catch (err) {
         console.warn('Supabase room delete error:', err);
       }
@@ -267,7 +286,7 @@ export function SuperAdminProvider({ children }) {
   const metrics = {
     totalHotels: hotels.length,
     activeHotels: hotels.filter(h => h.status === 'ACTIVE').length,
-    totalRooms: globalRooms.length > 0 ? globalRooms.length : hotels.reduce((acc, h) => acc + (Number(h.totalRooms) || 0), 0),
+    totalRooms: globalRooms.length,
     totalBookings: globalReservations.length,
     totalGrossRevenue: globalReservations.reduce((acc, r) => acc + (Number(r.amount) || 0), 0),
     confirmedBookings: globalReservations.filter(r => r.status === 'CONFIRMED' || r.status === 'CHECKED_IN').length,
@@ -295,8 +314,10 @@ export function SuperAdminProvider({ children }) {
       logout,
       addHotel,
       updateHotel,
+      deleteHotel,
       toggleHotelStatus,
-      deleteRoom
+      deleteRoom,
+      refreshData: loadData
     }}>
       {children}
     </SuperAdminContext.Provider>
