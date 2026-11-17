@@ -16,7 +16,7 @@ export default function EditHotelModal() {
   const [shortName, setShortName] = useState(editingHotel.shortName || '');
   const [ownerName, setOwnerName] = useState(editingHotel.ownerName || '');
   const [email, setEmail] = useState(editingHotel.email || '');
-  const [password, setPassword] = useState(editingHotel.password || '');
+  const [password, setPassword] = useState('');
   const [mobile, setMobile] = useState(editingHotel.mobile || '');
   const [address, setAddress] = useState(editingHotel.address || '');
   const [city, setCity] = useState(editingHotel.city || '');
@@ -83,8 +83,12 @@ export default function EditHotelModal() {
     e.preventDefault();
     setError('');
 
-    if (!email.trim() || !password.trim() || password.trim().length < 6) {
-      setError('Valid Admin Email and Password (minimum 6 characters) are required.');
+    if (!email.trim()) {
+      setError('Valid Admin Email is required.');
+      return;
+    }
+    if (password.trim() && password.trim().length < 6) {
+      setError('New Admin Password must be at least 6 characters (or leave blank to keep current).');
       return;
     }
 
@@ -97,7 +101,7 @@ export default function EditHotelModal() {
         shortName: shortName.trim().toUpperCase(),
         ownerName: ownerName.trim(),
         email: email.trim().toLowerCase(),
-        password: password.trim(),
+        ...(password.trim() ? { password: password.trim() } : { password: '' }),
         mobile: mobile.trim(),
         address: address.trim(),
         city: city.trim(),
@@ -162,7 +166,7 @@ export default function EditHotelModal() {
             </div>
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="block text-slate-300 font-semibold">Admin Password * (min 6 chars)</label>
+                <label className="block text-slate-300 font-semibold">Reset Password (optional, min 6 chars)</label>
                 <button
                   type="button"
                   onClick={generateNewPassword}
@@ -174,10 +178,9 @@ export default function EditHotelModal() {
               </div>
               <input
                 type="text"
-                required
-                minLength={6}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                placeholder="Leave blank to keep current password"
                 className="w-full px-3.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white font-mono focus:ring-2 focus:ring-indigo-500"
               />
             </div>

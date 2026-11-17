@@ -346,13 +346,13 @@ export default function AdminInsightsModal() {
                 <button
                   type="button"
                   onClick={() => {
-                    navigator.clipboard?.writeText(`Email: ${h.email} | Password: ${h.password}`);
-                    showNotification(`Copied credentials for ${h.email}`);
+                    navigator.clipboard?.writeText(`Email: ${h.email} | Slug: ${h.slug || h.id}`);
+                    showNotification(`Copied login ID for ${h.email}`);
                   }}
                   className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-semibold flex items-center gap-1 cursor-pointer"
                 >
                   <Copy className="w-3 h-3" />
-                  <span>Copy Credentials</span>
+                  <span>Copy Login ID</span>
                 </button>
               </div>
 
@@ -366,16 +366,10 @@ export default function AdminInsightsModal() {
                 </div>
 
                 <div className="p-3 rounded-xl bg-slate-900 border border-slate-800/80">
-                  <span className="text-[10px] text-slate-400 uppercase font-bold block">Admin Password</span>
-                  <div className="font-mono font-bold text-amber-300 mt-1 flex items-center justify-between">
-                    <span>{showPassword ? h.password : '••••••••••'}</span>
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(p => !p)}
-                      className="text-slate-400 hover:text-white cursor-pointer"
-                    >
-                      {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                    </button>
+                  <span className="text-[10px] text-slate-400 uppercase font-bold block">Credential Protection</span>
+                  <div className="font-mono font-bold text-emerald-300 mt-1 flex items-center justify-between text-xs">
+                    <span>Bcrypt Vault + Auth JWT</span>
+                    <span className="text-[10px] text-slate-400 font-sans">Edit to reset</span>
                   </div>
                 </div>
 

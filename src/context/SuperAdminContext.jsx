@@ -1,21 +1,23 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import { supabase, supabaseUrl, supabaseAnonKey, isSupabaseConfigured } from '../lib/supabase';
+import { supabase, supabaseUrl, supabaseAnonKey, isSupabaseConfigured, getAuthHeaders } from '../lib/supabase';
+import { cachedQuery, invalidateCache, invalidateAllCache } from '../lib/queryCache';
 import { normalizeRoomCategoryName } from '../utils/roomPresets';
 
 const SuperAdminContext = createContext(null);
 const PMS_API_URL = `${supabaseUrl}/functions/v1/pms-api`;
+const SUPERADMIN_PAGE_SIZE = 200;
+const POLL_FALLBACK_MS = 180000;
+const STALE_VISIBLE_MS = 60000;
 
 async function callPmsProvisionApi(payload) {
   try {
+    const headers = await getAuthHeaders({
+      Accept: 'application/json',
+      'x-aavasa-client': 'aavasa-superadmin'
+    });
     const res = await fetch(PMS_API_URL, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-        apikey: supabaseAnonKey,
-        Authorization: `Bearer ${supabaseAnonKey}`,
-        'x-aavasa-client': 'aavasa-superadmin'
-      },
+      headers,
       body: JSON.stringify(payload)
     });
     const data = await res.json().catch(() => null);
@@ -26,7 +28,6 @@ async function callPmsProvisionApi(payload) {
 }
 
 const SUPERADMIN_EMAIL = 'superadmin@aavasa.com';
-const SUPERADMIN_PASSWORD = 'aavasa@18';
 
 const DEFAULT_SUPER_ADMIN = {
   id: 'sa_aavasa_01',
@@ -127,13 +128,39 @@ export function SuperAdminProvider({ children }) {
     } catch (e) { }
   }, [isAuthenticated, currentAdmin]);
 
-  // Purge all legacy AuraStay localStorage keys on startup
+  // Purge all legacy AuraStay localStorage keys on startup + verify active Supabase Auth JWT
   useEffect(() => {
     try {
       localStorage.removeItem('aurastay_saas_hotels');
       localStorage.removeItem('aurastay_superadmin_auth');
       localStorage.removeItem('aurastay_superadmin_user');
     } catch (e) { }
+
+    if (!isSupabaseConfigured || !supabase) return;
+    let mounted = true;
+    supabase.auth.getSession().then(({ data }) => {
+      if (!mounted) return;
+      const role = data?.session?.user?.app_metadata?.role;
+      const hasSuperJwt = Boolean(data?.session?.access_token && role === 'super_admin');
+      if (isAuthenticated && !hasSuperJwt) {
+        setIsAuthenticated(false);
+        localStorage.removeItem('aavasa_superadmin_auth_v2');
+      }
+    }).catch(() => {});
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT') {
+        invalidateAllCache();
+        setIsAuthenticated(false);
+        localStorage.removeItem('aavasa_superadmin_auth_v2');
+        localStorage.removeItem('aavasa_superadmin_user_v2');
+      }
+    });
+
+    return () => {
+      mounted = false;
+      authListener?.subscription?.unsubscribe();
+    };
   }, []);
 
   const showNotification = (msg, type = 'success') => {
@@ -143,9 +170,13 @@ export function SuperAdminProvider({ children }) {
     }, 4000);
   };
 
-  // 4. Fetch Live Supabase Data & Purge any legacy AuraStay row
-  const loadData = useCallback(async () => {
-    if (!isSupabaseConfigured) return;
+  const lastLoadedAtRef = useRef(0);
+
+  // 4. Fetch Live Supabase Data (explicit non-secret columns, range bounds & mutation-aware cache)
+  const loadData = useCallback(async (options = {}) => {
+    if (!isSupabaseConfigured || !isAuthenticated) return;
+    const force = Boolean(options?.force);
+
     try {
       const [
         hotelsRes,
@@ -156,25 +187,52 @@ export function SuperAdminProvider({ children }) {
         cabRes,
         hkRes,
         invRes
-      ] = await Promise.all([
-        supabase.from('hotels').select('*').order('created_at', { ascending: false }),
-        supabase.from('rooms').select('*').order('room_number', { ascending: true }),
-        supabase.from('room_types').select('*').order('name', { ascending: true }),
-        supabase.from('reservations').select('*').order('created_at', { ascending: false }),
-        supabase.from('fnb_orders').select('*').order('created_at', { ascending: false }),
-        supabase.from('cab_bookings').select('*').order('created_at', { ascending: false }),
-        supabase.from('housekeeping_tasks').select('*').order('created_at', { ascending: false }),
-        supabase.from('financial_invoices').select('*').order('created_at', { ascending: false })
-      ]);
+      ] = await cachedQuery(
+        'superadmin:dashboard',
+        () => Promise.all([
+          supabase
+            .from('hotels')
+            .select('id, slug, name, short_name, logo_url, owner_name, email, mobile, address, city, total_rooms, currency, currency_symbol, status, plan, commission_rate, aiosell_hotel_code, created_at')
+            .order('created_at', { ascending: false }),
+          supabase
+            .from('rooms')
+            .select('id, hotel_id, room_number, room_type_id, floor, type, bed, status, housekeeping, price, guest, booking_id, check_out, is_ota_locked, ota_channel')
+            .order('room_number', { ascending: true }),
+          supabase
+            .from('room_types')
+            .select('id, hotel_id, name, label, bedding_type, max_adults, max_children, area_sqft, base_price, is_booking_engine')
+            .order('name', { ascending: true }),
+          supabase
+            .from('reservations')
+            .select('id, hotel_id, guest, guest_phone, guest_email, room, room_number, room_type, check_in, check_out, amount, paid, status, payment, source, created_at')
+            .order('created_at', { ascending: false })
+            .range(0, SUPERADMIN_PAGE_SIZE - 1),
+          supabase
+            .from('fnb_orders')
+            .select('id, hotel_id, room_table, guest, total, status, time, created_at')
+            .order('created_at', { ascending: false })
+            .range(0, SUPERADMIN_PAGE_SIZE - 1),
+          supabase
+            .from('cab_bookings')
+            .select('id, hotel_id, guest_name, room_number, cab_type, fare, booking_status, created_at')
+            .order('created_at', { ascending: false })
+            .range(0, SUPERADMIN_PAGE_SIZE - 1),
+          supabase
+            .from('housekeeping_tasks')
+            .select('id, hotel_id, room_number, task_type, priority, assigned_to, status, created_at')
+            .order('created_at', { ascending: false })
+            .range(0, SUPERADMIN_PAGE_SIZE - 1),
+          supabase
+            .from('financial_invoices')
+            .select('id, hotel_id, reservation_id, room_number, client_name, total_amount, paid_amount, status, created_at')
+            .order('created_at', { ascending: false })
+            .range(0, SUPERADMIN_PAGE_SIZE - 1)
+        ]),
+        { ttlMs: 12000, force }
+      );
+      lastLoadedAtRef.current = Date.now();
 
       if (!hotelsRes.error && Array.isArray(hotelsRes.data)) {
-        const legacyRows = hotelsRes.data.filter(isLegacyAuraStayRecord);
-        if (legacyRows.length > 0) {
-          for (const legacy of legacyRows) {
-            await supabase.from('hotels').delete().eq('id', legacy.id);
-          }
-        }
-
         const validHotels = hotelsRes.data.filter(h => !isLegacyAuraStayRecord(h));
         const validHotelIds = new Set(
           validHotels.flatMap(h => [
@@ -191,7 +249,6 @@ export function SuperAdminProvider({ children }) {
           logoUrl: h.logo_url || '',
           ownerName: h.owner_name,
           email: h.email,
-          password: h.password,
           mobile: h.mobile,
           address: h.address,
           city: h.city,
@@ -201,22 +258,11 @@ export function SuperAdminProvider({ children }) {
           status: h.status || 'ACTIVE',
           plan: h.plan || 'Enterprise',
           commissionRate: Number(h.commission_rate) || 10,
+          aiosellHotelCode: h.aiosell_hotel_code || '',
           createdAt: h.created_at
         })));
 
         if (Array.isArray(roomsRes.data)) {
-          const orphanRooms = roomsRes.data.filter(
-            r => !r.hotel_id || !validHotelIds.has(String(r.hotel_id).trim().toLowerCase())
-          );
-          if (orphanRooms.length > 0) {
-            for (const orph of orphanRooms) {
-              if (orph.id) {
-                await supabase.from('rooms').delete().eq('id', orph.id);
-              } else if (orph.room_number) {
-                await supabase.from('rooms').delete().eq('room_number', orph.room_number);
-              }
-            }
-          }
           setGlobalRooms(
             roomsRes.data.filter(
               r => r.hotel_id && validHotelIds.has(String(r.hotel_id).trim().toLowerCase())
@@ -233,16 +279,6 @@ export function SuperAdminProvider({ children }) {
         }
 
         if (Array.isArray(resRes.data)) {
-          const orphanRes = resRes.data.filter(
-            r => !r.hotel_id || !validHotelIds.has(String(r.hotel_id).trim().toLowerCase())
-          );
-          if (orphanRes.length > 0) {
-            for (const orph of orphanRes) {
-              if (orph.id) {
-                await supabase.from('reservations').delete().eq('id', orph.id);
-              }
-            }
-          }
           setGlobalReservations(
             resRes.data.filter(
               r => r.hotel_id && validHotelIds.has(String(r.hotel_id).trim().toLowerCase())
@@ -266,31 +302,43 @@ export function SuperAdminProvider({ children }) {
     } catch (err) {
       console.warn('Super Admin Supabase load error:', err);
     }
-  }, []);
+  }, [isAuthenticated]);
 
   const realtimeDebounceRef = useRef(null);
 
   const scheduleLoadData = useCallback(() => {
+    invalidateCache('superadmin:dashboard');
     if (realtimeDebounceRef.current) clearTimeout(realtimeDebounceRef.current);
     realtimeDebounceRef.current = setTimeout(() => {
-      loadData();
-    }, 300);
+      loadData({ force: true });
+    }, 350);
   }, [loadData]);
 
   useEffect(() => {
+    if (!isAuthenticated) return;
     loadData();
-    // Free-plan optimization: realtime WebSockets handle live updates; fallback poll every 30s
     const pollTimer = setInterval(() => {
-      loadData();
-    }, 30000);
+      if (typeof document === 'undefined' || document.visibilityState === 'visible') {
+        loadData({ force: true });
+      }
+    }, POLL_FALLBACK_MS);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && Date.now() - lastLoadedAtRef.current > STALE_VISIBLE_MS) {
+        loadData({ force: true });
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     return () => {
       clearInterval(pollTimer);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       if (realtimeDebounceRef.current) clearTimeout(realtimeDebounceRef.current);
     };
-  }, [loadData]);
+  }, [isAuthenticated, loadData]);
 
   useEffect(() => {
-    if (!isSupabaseConfigured) return;
+    if (!isSupabaseConfigured || !isAuthenticated) return;
 
     const channel = supabase.channel('superadmin_realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'hotels' }, () => scheduleLoadData())
@@ -306,9 +354,9 @@ export function SuperAdminProvider({ children }) {
       supabase.removeChannel(channel);
       supabase.removeChannel(broadcastChannel);
     };
-  }, [scheduleLoadData]);
+  }, [isAuthenticated, scheduleLoadData]);
 
-  // 5. Strict Super Admin Authentication (superadmin@aavasa.com / aavasa@18)
+  // 5. Cryptographic Super Admin Authentication via Supabase Auth + Server Edge Verification
   const login = async (email, password) => {
     const cleanEmail = String(email || '').trim().toLowerCase();
     const rawPass = String(password || '').trim();
@@ -317,29 +365,36 @@ export function SuperAdminProvider({ children }) {
       return { success: false, message: 'Please enter both Super Admin email and password.' };
     }
 
-    if (cleanEmail !== SUPERADMIN_EMAIL || rawPass !== SUPERADMIN_PASSWORD) {
+    const apiRes = await callPmsProvisionApi({
+      action: 'superadmin_login',
+      email: cleanEmail,
+      password: rawPass
+    });
+
+    if (!apiRes.reachable) {
+      return { success: false, message: 'Unable to reach authentication server. Please try again.' };
+    }
+
+    if (!apiRes.ok || !apiRes.data?.success) {
       return {
         success: false,
-        message: 'Invalid Super Admin credentials. Only authorized Aavasa Super Admin credentials are allowed.'
+        message: apiRes.data?.message || 'Invalid Super Admin credentials.'
       };
     }
 
+    if (apiRes.data.session?.access_token && apiRes.data.session?.refresh_token && supabase) {
+      await supabase.auth.setSession({
+        access_token: apiRes.data.session.access_token,
+        refresh_token: apiRes.data.session.refresh_token
+      });
+    }
+
+    invalidateAllCache();
     const user = {
       ...DEFAULT_SUPER_ADMIN,
-      email: SUPERADMIN_EMAIL
+      ...(apiRes.data.admin || {}),
+      email: apiRes.data.admin?.email || cleanEmail
     };
-
-    if (isSupabaseConfigured) {
-      try {
-        await supabase.from('super_admins').upsert({
-          id: 'sa_aavasa_01',
-          name: 'Aavasa Super Admin',
-          email: SUPERADMIN_EMAIL,
-          password: SUPERADMIN_PASSWORD,
-          role: 'PLATFORM_OWNER'
-        });
-      } catch (e) { }
-    }
 
     setIsAuthenticated(true);
     setCurrentAdmin(user);
@@ -350,7 +405,19 @@ export function SuperAdminProvider({ children }) {
   };
 
   const logout = () => {
+    invalidateAllCache();
+    if (supabase) {
+      supabase.auth.signOut().catch(() => {});
+    }
     setIsAuthenticated(false);
+    setHotels([]);
+    setGlobalRooms([]);
+    setGlobalRoomTypes([]);
+    setGlobalReservations([]);
+    setGlobalFnbOrders([]);
+    setGlobalCabBookings([]);
+    setGlobalHkTasks([]);
+    setGlobalInvoices([]);
     localStorage.removeItem('aavasa_superadmin_auth_v2');
     localStorage.removeItem('aavasa_superadmin_user_v2');
     showNotification('Logged out successfully', 'info');
@@ -554,11 +621,13 @@ export function SuperAdminProvider({ children }) {
         });
 
         if (apiRes.reachable && apiRes.ok && apiRes.data?.success) {
-          await loadData();
+          invalidateCache('superadmin:dashboard');
+          await loadData({ force: true });
         } else if (apiRes.reachable && apiRes.status >= 400 && apiRes.status < 500) {
           return { success: false, message: apiRes.data?.message || 'Could not provision property in backend.' };
         } else {
-          // Fallback to direct Supabase client writes if Edge Function is temporarily unreachable
+          // Fallback to direct Supabase client writes (without deprecated plaintext password column)
+          const { password: _omitPwd, ...safeHotelRow } = hotelRow;
           await Promise.all([
             supabase.from('rooms').delete().eq('hotel_id', hotel.id),
             supabase.from('room_types').delete().eq('hotel_id', hotel.id),
@@ -570,7 +639,7 @@ export function SuperAdminProvider({ children }) {
             supabase.from('banquet_bookings').delete().eq('hotel_id', hotel.id)
           ]);
 
-          const { error } = await supabase.from('hotels').upsert(hotelRow);
+          const { error } = await supabase.from('hotels').upsert(safeHotelRow);
           if (error) {
             console.warn('Supabase hotel insert error:', error);
             return { success: false, message: `Database error: ${error.message}` };
@@ -581,7 +650,8 @@ export function SuperAdminProvider({ children }) {
           }
 
           await broadcastSuperAdminSync({ action: 'hotel_created', hotelId: hotel.id });
-          await loadData();
+          invalidateCache('superadmin:dashboard');
+          await loadData({ force: true });
         }
       } catch (err) {
         console.warn('Supabase hotel insert error:', err);
@@ -593,7 +663,7 @@ export function SuperAdminProvider({ children }) {
     showNotification(
       categoryRoomsSum > 0
         ? `Admin credential & ${categoryRoomsSum} rooms created! Login: ${hotel.email}`
-        : `Admin credential created! Login: ${hotel.email} | Password: ${hotel.password}`
+        : `Admin credential created! Login: ${hotel.email}`
     );
     setIsCreateHotelModalOpen(false);
     return { success: true, hotel };
@@ -605,12 +675,12 @@ export function SuperAdminProvider({ children }) {
     const cleanName = String(updated.name || '').trim();
     const cleanSlug = String(updated.slug || updated.id || '').trim().toLowerCase();
 
-    if (!cleanName || !cleanEmail || !cleanPassword) {
-      showNotification('Property Name, Admin Email, and Password cannot be empty.', 'error');
-      return { success: false, message: 'Property Name, Admin Email, and Password cannot be empty.' };
+    if (!cleanName || !cleanEmail) {
+      showNotification('Property Name and Admin Email cannot be empty.', 'error');
+      return { success: false, message: 'Property Name and Admin Email cannot be empty.' };
     }
 
-    if (cleanPassword.length < 6) {
+    if (cleanPassword && cleanPassword.length < 6) {
       showNotification('Admin password must be at least 6 characters.', 'error');
       return { success: false, message: 'Admin password must be at least 6 characters.' };
     }
@@ -618,7 +688,7 @@ export function SuperAdminProvider({ children }) {
     const newRoomCategories = Array.isArray(updated.newRoomCategories) ? updated.newRoomCategories : [];
     const addedRoomsCount = newRoomCategories.reduce((sum, c) => sum + (Math.max(0, Number(c.count) || 0)), 0);
 
-    setHotels(prev => prev.map(h => h.id === updated.id ? { ...h, ...updated, email: cleanEmail, password: cleanPassword, name: cleanName, slug: cleanSlug } : h));
+    setHotels(prev => prev.map(h => h.id === updated.id ? { ...h, ...updated, email: cleanEmail, name: cleanName, slug: cleanSlug } : h));
     showNotification(
       addedRoomsCount > 0
         ? `Updated "${cleanName}" and added ${addedRoomsCount} new room(s) in Supabase`
@@ -644,7 +714,7 @@ export function SuperAdminProvider({ children }) {
           logo_url: updated.logoUrl,
           owner_name: updated.ownerName,
           email: cleanEmail,
-          password: cleanPassword,
+          ...(cleanPassword ? { password: cleanPassword } : {}),
           mobile: updated.mobile,
           address: updated.address,
           city: updated.city,
@@ -667,10 +737,12 @@ export function SuperAdminProvider({ children }) {
             await provisionRoomsForHotel(updated.id, normalizedNewCats);
           }
 
-          await supabase.from('hotels').update(updatedHotelRow).eq('id', updated.id);
+          const { password: _omitPwd, ...safeUpdateRow } = updatedHotelRow;
+          await supabase.from('hotels').update(safeUpdateRow).eq('id', updated.id);
           await broadcastSuperAdminSync({ action: 'hotel_updated', hotelId: updated.id });
         }
-        await loadData();
+        invalidateCache('superadmin:dashboard');
+        await loadData({ force: true });
       } catch (err) {
         console.warn('Supabase hotel update error:', err);
       }
@@ -687,19 +759,26 @@ export function SuperAdminProvider({ children }) {
 
     if (isSupabaseConfigured) {
       try {
-        await Promise.all([
-          supabase.from('rooms').delete().eq('hotel_id', hotelId),
-          supabase.from('room_types').delete().eq('hotel_id', hotelId),
-          supabase.from('reservations').delete().eq('hotel_id', hotelId),
-          supabase.from('fnb_orders').delete().eq('hotel_id', hotelId),
-          supabase.from('housekeeping_tasks').delete().eq('hotel_id', hotelId),
-          supabase.from('cab_bookings').delete().eq('hotel_id', hotelId),
-          supabase.from('financial_invoices').delete().eq('hotel_id', hotelId),
-          supabase.from('banquet_bookings').delete().eq('hotel_id', hotelId),
-          supabase.from('hotels').delete().eq('id', hotelId)
-        ]);
-        await broadcastSuperAdminSync({ action: 'hotel_deleted', hotelId });
-        await loadData();
+        const apiRes = await callPmsProvisionApi({
+          action: 'delete_hotel',
+          hotelId
+        });
+        if (!apiRes.reachable || !apiRes.ok) {
+          await Promise.all([
+            supabase.from('rooms').delete().eq('hotel_id', hotelId),
+            supabase.from('room_types').delete().eq('hotel_id', hotelId),
+            supabase.from('reservations').delete().eq('hotel_id', hotelId),
+            supabase.from('fnb_orders').delete().eq('hotel_id', hotelId),
+            supabase.from('housekeeping_tasks').delete().eq('hotel_id', hotelId),
+            supabase.from('cab_bookings').delete().eq('hotel_id', hotelId),
+            supabase.from('financial_invoices').delete().eq('hotel_id', hotelId),
+            supabase.from('banquet_bookings').delete().eq('hotel_id', hotelId),
+            supabase.from('hotels').delete().eq('id', hotelId)
+          ]);
+          await broadcastSuperAdminSync({ action: 'hotel_deleted', hotelId });
+        }
+        invalidateCache('superadmin:dashboard');
+        await loadData({ force: true });
       } catch (err) {
         console.warn('Supabase hotel delete error:', err);
       }
@@ -720,12 +799,20 @@ export function SuperAdminProvider({ children }) {
 
     if (isSupabaseConfigured) {
       try {
-        await supabase.from('hotels').update({
-          total_rooms: cleanLimit,
-          updated_at: new Date().toISOString()
-        }).eq('id', hotelId);
-        await broadcastSuperAdminSync({ action: 'hotel_limit_updated', hotelId, totalRooms: cleanLimit });
-        await loadData();
+        const apiRes = await callPmsProvisionApi({
+          action: 'update_hotel_quota',
+          hotelId,
+          totalRooms: cleanLimit
+        });
+        if (!apiRes.reachable || !apiRes.ok) {
+          await supabase.from('hotels').update({
+            total_rooms: cleanLimit,
+            updated_at: new Date().toISOString()
+          }).eq('id', hotelId);
+          await broadcastSuperAdminSync({ action: 'hotel_limit_updated', hotelId, totalRooms: cleanLimit });
+        }
+        invalidateCache('superadmin:dashboard');
+        await loadData({ force: true });
       } catch (err) {
         console.warn('Supabase room limit update error:', err);
       }
@@ -744,15 +831,24 @@ export function SuperAdminProvider({ children }) {
 
     if (isSupabaseConfigured) {
       try {
-        if (roomId) {
-          await supabase.from('rooms').delete().eq('id', roomId);
-        } else if (roomNumber && hotelId) {
-          await supabase.from('rooms').delete().eq('hotel_id', hotelId).eq('room_number', roomNumber);
-        } else if (roomNumber) {
-          await supabase.from('rooms').delete().eq('room_number', roomNumber);
+        const apiRes = await callPmsProvisionApi({
+          action: 'superadmin_delete_room',
+          roomId,
+          roomNumber,
+          hotelId
+        });
+        if (!apiRes.reachable || !apiRes.ok) {
+          if (roomId) {
+            await supabase.from('rooms').delete().eq('id', roomId);
+          } else if (roomNumber && hotelId) {
+            await supabase.from('rooms').delete().eq('hotel_id', hotelId).eq('room_number', roomNumber);
+          } else if (roomNumber) {
+            await supabase.from('rooms').delete().eq('room_number', roomNumber);
+          }
+          await broadcastSuperAdminSync({ action: 'room_delete', roomNumber, hotelId });
         }
-        await broadcastSuperAdminSync({ action: 'room_delete', roomNumber, hotelId });
-        await loadData();
+        invalidateCache('superadmin:dashboard');
+        await loadData({ force: true });
       } catch (err) {
         console.warn('Supabase room delete error:', err);
       }

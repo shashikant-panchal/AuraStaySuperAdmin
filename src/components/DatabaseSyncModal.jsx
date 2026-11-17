@@ -2,10 +2,11 @@ import React, { useState } from 'react';
 import { useSuperAdmin } from '../context/SuperAdminContext';
 import { X, Database, Copy, Check, Terminal, ExternalLink } from 'lucide-react';
 
-const SQL_SCRIPT = `-- Aavasa Multi-Tenant SaaS Master Database Migration
+const SQL_SCRIPT = `-- Aavasa Multi-Tenant SaaS Hardened Schema & RLS Reference
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
--- 1. Hotels / Tenants Table
+-- 1. Hotels / Tenants Table (Credentials stored separately in private_auth + auth.users)
 CREATE TABLE IF NOT EXISTS hotels (
     id TEXT PRIMARY KEY,
     slug TEXT UNIQUE NOT NULL,
@@ -14,7 +15,6 @@ CREATE TABLE IF NOT EXISTS hotels (
     logo_url TEXT DEFAULT '',
     owner_name TEXT NOT NULL,
     email TEXT UNIQUE NOT NULL,
-    password TEXT NOT NULL,
     mobile TEXT DEFAULT '',
     address TEXT DEFAULT 'India',
     city TEXT DEFAULT 'Bengaluru',
@@ -28,32 +28,16 @@ CREATE TABLE IF NOT EXISTS hotels (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 2. Add hotel_id to rooms & reservations
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'rooms' AND column_name = 'hotel_id') THEN
-        ALTER TABLE rooms ADD COLUMN hotel_id TEXT DEFAULT 'shivanandi';
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'reservations' AND column_name = 'hotel_id') THEN
-        ALTER TABLE reservations ADD COLUMN hotel_id TEXT DEFAULT 'shivanandi';
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'fnb_orders' AND column_name = 'hotel_id') THEN
-        ALTER TABLE fnb_orders ADD COLUMN hotel_id TEXT DEFAULT 'shivanandi';
-    END IF;
-END $$;
+-- 2. Strictly enforce Row Level Security on all public tables
+ALTER TABLE IF EXISTS hotels ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS rooms ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS room_types ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS reservations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS super_admins ENABLE ROW LEVEL SECURITY;
+ALTER VIEW IF EXISTS aiosell_live_inventory_view SET (security_invoker = true);
 
--- 3. Enable Realtime Publications
-ALTER PUBLICATION supabase_realtime ADD TABLE hotels;
-ALTER PUBLICATION supabase_realtime ADD TABLE rooms;
-ALTER PUBLICATION supabase_realtime ADD TABLE reservations;
-
--- 4. Disable RLS so SuperAdmin, Hotel Admin, and Guest Booking sync seamlessly
-ALTER TABLE IF EXISTS hotels DISABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS rooms DISABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS reservations DISABLE ROW LEVEL SECURITY;
-
--- 5. Clean Slate: No seed hotels or default Admin credentials.
--- Create Hotel Admin credentials directly in the Aavasa SuperAdmin portal.`;
+-- Note: Full idempotent security & B-Tree index migration lives in:
+-- AuraStay/supabase/migrations/20261117133000_security_and_indexes.sql`;
 
 export default function DatabaseSyncModal() {
   const { isSqlModalOpen, setIsSqlModalOpen, showNotification } = useSuperAdmin();
