@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import { supabase, supabaseUrl, supabaseAnonKey, isSupabaseConfigured, getAuthHeaders } from '../lib/supabase';
+import { supabase, supabaseUrl, supabaseAnonKey, isSupabaseConfigured, getAuthHeaders, isTransientAuthError } from '../lib/supabase';
 import { cachedQuery, invalidateCache, invalidateAllCache } from '../lib/queryCache';
 import { normalizeRoomCategoryName } from '../utils/roomPresets';
 
@@ -138,8 +138,9 @@ export function SuperAdminProvider({ children }) {
 
     if (!isSupabaseConfigured || !supabase) return;
     let mounted = true;
-    supabase.auth.getSession().then(({ data }) => {
+    supabase.auth.getSession().then(({ data, error }) => {
       if (!mounted) return;
+      if (isTransientAuthError(error)) return;
       const role = data?.session?.user?.app_metadata?.role;
       const hasSuperJwt = Boolean(data?.session?.access_token && role === 'super_admin');
       if (isAuthenticated && !hasSuperJwt) {
@@ -157,8 +158,15 @@ export function SuperAdminProvider({ children }) {
       }
     });
 
+    const handleOnline = () => {
+      if (!mounted) return;
+      supabase.auth.getSession().catch(() => {});
+    };
+    window.addEventListener('online', handleOnline);
+
     return () => {
       mounted = false;
+      window.removeEventListener('online', handleOnline);
       authListener?.subscription?.unsubscribe();
     };
   }, []);
@@ -383,10 +391,13 @@ export function SuperAdminProvider({ children }) {
     }
 
     if (apiRes.data.session?.access_token && apiRes.data.session?.refresh_token && supabase) {
-      await supabase.auth.setSession({
+      const { error: setSessionErr } = await supabase.auth.setSession({
         access_token: apiRes.data.session.access_token,
         refresh_token: apiRes.data.session.refresh_token
       });
+      if (setSessionErr) {
+        return { success: false, message: 'Could not initialize secure session. Please try again.' };
+      }
     }
 
     invalidateAllCache();
@@ -407,7 +418,7 @@ export function SuperAdminProvider({ children }) {
   const logout = () => {
     invalidateAllCache();
     if (supabase) {
-      supabase.auth.signOut().catch(() => {});
+      supabase.auth.signOut({ scope: 'local' }).catch(() => {});
     }
     setIsAuthenticated(false);
     setHotels([]);
